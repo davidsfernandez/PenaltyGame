@@ -1,28 +1,40 @@
-using Microsoft.EntityFrameworkCore;
-using PenaltyGameAPI.Data;
-using PenaltyGameAPI.Endpoints;
+using Microsoft.AspNetCore.HttpLogging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+// --- Phase 1: Foundation & Environment Setup ---
+
+// Configure OpenAPI for technical documentation (English)
 builder.Services.AddOpenApi();
 
-// Configure SQLite
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=game.db";
-builder.Services.AddDbContext<GameDbContext>(options =>
-    options.UseSqlite(connectionString));
+// Configure CORS - Production Grade: Read allowed origins from configuration
+// For development, we use a restricted policy that can be tightened in appsettings.json
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 
-// Configure CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
-        policy =>
+    options.AddPolicy("GamePolicy", policy =>
+    {
+        if (allowedOrigins.Length > 0)
         {
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        }
+        else if (builder.Environment.IsDevelopment())
+        {
+            // Fallback for local development only
             policy.AllowAnyOrigin()
                   .AllowAnyMethod()
                   .AllowAnyHeader();
-        });
+        }
+    });
+});
+
+// Configure Logging for forensic audit (Domain 10)
+builder.Services.AddHttpLogging(logging =>
+{
+    logging.LoggingFields = HttpLoggingFields.All;
 });
 
 var app = builder.Build();
@@ -31,18 +43,27 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseHttpLogging();
 }
 
 app.UseHttpsRedirection();
 
-// Enable static files and default files
+// --- Domain 31 & 37: Zero Initial Load & Performance ---
+// Configure Static Files with caching policies for production
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // Cache game assets (images, sounds, js) for 7 days in production
+        const int durationInSeconds = 60 * 60 * 24 * 7;
+        ctx.Context.Response.Headers.Append("Cache-Control", $"public,max-age={durationInSeconds}");
+    }
+});
 
-// Enable CORS
-app.UseCors("AllowAll");
+app.UseCors("GamePolicy");
 
-// Map Endpoints
-app.MapLeaderboardEndpoints();
+// Root redirection to index.html (Handled by UseDefaultFiles typically, but explicit for clarity)
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();

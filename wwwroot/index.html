@@ -2,27 +2,56 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Penalty Game - Arcade Challenge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    
+    <title>Penalty Challenge | Experiencia Interactiva</title>
+    
+    <!-- SEO & Metadata -->
+    <meta name="description" content="Demuestra tu maestría en el campo con el Desafío de Penales. Una experiencia arcade de alta precisión.">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph (Domain 48) -->
+    <meta property="og:title" content="Penalty Challenge - ¿Puedes superar el récord?">
+    <meta property="og:description" content="Enfréntate al portero en este desafío de penales interactivo de alta fidelidad.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="/">
+    <meta property="og:image" content="assets/sprites/social-card.png">
+    
+    <!-- Styles (Domain 37: Critical Inline Shell would go here, for now linked) -->
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="game-container">
+        <!-- Interaction Layer (Domain 21) -->
         <canvas id="game-canvas"></canvas>
-        <div class="ui-overlay">
-            <div class="score-board">
-                <div id="score-label">PUNTUACIÓN: <span id="score-value">0</span></div>
-                <div id="level-label">NIVEL: <span id="level-value">1</span></div>
-            </div>
-            <div class="message-area" id="message-area">
-                ¡DESLIZA PARA TIRAR!
-            </div>
-            <div id="ui-controls" style="text-align: center; pointer-events: auto;">
-                <!-- Controls like 'Reiniciar' could go here if needed -->
-            </div>
+        
+        <!-- Structural Layer (Domain 5) -->
+        <div class="ui-overlay" id="ui-root">
+            <header class="hud">
+                <div class="hud-item score">
+                    <span class="label">PUNTUACIÓN</span>
+                    <span id="score-value" class="value">0</span>
+                </div>
+                <div class="hud-item level">
+                    <span class="label">NIVEL</span>
+                    <span id="level-value" class="value">1</span>
+                </div>
+            </header>
+
+            <main class="interaction-prompt">
+                <div id="message-area" class="message animate-pulse">
+                    ¡DESLIZA PARA TIRAR!
+                </div>
+            </main>
+
+            <footer class="controls" id="ui-controls">
+                <!-- Administrative or persistent controls -->
+            </footer >
         </div>
     </div>
 
+    <!-- Initialization Script (Domain 28 & 31) -->
     <script type="module" src="js/game.js"></script>
 </body>
 </html>
