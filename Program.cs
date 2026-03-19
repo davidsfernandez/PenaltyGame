@@ -1,8 +1,16 @@
 using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.EntityFrameworkCore;
+using PenaltyGameAPI.Data;
+using PenaltyGameAPI.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Phase 1: Foundation & Environment Setup ---
+// --- Phase 1 & 3: Foundation & Persistence ---
+
+// Configure SQLite
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=game.db";
+builder.Services.AddDbContext<GameDbContext>(options =>
+    options.UseSqlite(connectionString));
 
 // Configure OpenAPI for technical documentation (English)
 builder.Services.AddOpenApi();
@@ -63,7 +71,10 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseCors("GamePolicy");
 
-// Root redirection to index.html (Handled by UseDefaultFiles typically, but explicit for clarity)
+// --- API Endpoints ---
+app.MapLeaderboardEndpoints();
+
+// Root health check
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();
