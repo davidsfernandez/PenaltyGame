@@ -22,8 +22,9 @@ builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IValidationService, ValidationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// Configure JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "a-very-long-and-secure-secret-key-for-development-123!";
+// --- Domain 50: Legacy Configuration ---
+bool isCampaignActive = builder.Configuration.GetValue<bool>("Campaign:IsActive", true);
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -33,7 +34,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? "a-very-long-and-secure-secret-key-for-development-123!"))
         };
     });
 
@@ -88,11 +89,25 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<IdempotencyMiddleware>();
 
-// --- API Endpoints ---
-app.MapAccessEndpoints(); // Phase 6
-app.MapLeaderboardEndpoints(); // Phase 3
-app.MapShootEndpoints(); // Phase 4
+// --- Domain 50: Campaign Lifecycle Gates ---
+// If campaign is inactive, block write endpoints with a themed response
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value?.ToLower() ?? "";
+    if (!isCampaignActive && (path.Contains("/api/game/shoot") || path.Contains("/api/access/validate")))
+    {
+        context.Response.StatusCode = StatusCodes.Status410Gone;
+        await context.Response.WriteAsJsonAsync(new { success = false, message = "The campaign has concluded. Thank you for participating." });
+        return;
+    }
+    await next();
+});
 
-app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
+// --- API Endpoints ---
+app.MapAccessEndpoints(); 
+app.MapLeaderboardEndpoints(); 
+app.MapShootEndpoints(); 
+
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", isCampaignActive, timestamp = DateTime.UtcNow }));
 
 app.Run();
