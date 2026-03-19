@@ -58,6 +58,9 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddHttpLogging(logging => { logging.LoggingFields = HttpLoggingFields.All; });
 
+// --- Phase 7: Background Processing ---
+builder.Services.AddHostedService<ScoreAuditorWorker>();
+
 var app = builder.Build();
 
 // --- Middleware Pipeline ---
