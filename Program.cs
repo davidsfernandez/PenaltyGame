@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.EntityFrameworkCore;
 using PenaltyGameAPI.Data;
 using PenaltyGameAPI.Endpoints;
+using PenaltyGameAPI.Middleware;
+using PenaltyGameAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,8 +17,11 @@ builder.Services.AddDbContext<GameDbContext>(options =>
 // Configure OpenAPI for technical documentation (English)
 builder.Services.AddOpenApi();
 
-// Configure CORS - Production Grade: Read allowed origins from configuration
-// For development, we use a restricted policy that can be tightened in appsettings.json
+// --- Phase 4: Security & Validation ---
+builder.Services.AddMemoryCache(); // Required for Idempotency
+builder.Services.AddSingleton<IValidationService, ValidationService>();
+
+// Configure CORS - Production Grade
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 
 builder.Services.AddCors(options =>
@@ -31,7 +36,6 @@ builder.Services.AddCors(options =>
         }
         else if (builder.Environment.IsDevelopment())
         {
-            // Fallback for local development only
             policy.AllowAnyOrigin()
                   .AllowAnyMethod()
                   .AllowAnyHeader();
@@ -39,7 +43,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configure Logging for forensic audit (Domain 10)
 builder.Services.AddHttpLogging(logging =>
 {
     logging.LoggingFields = HttpLoggingFields.All;
@@ -47,7 +50,10 @@ builder.Services.AddHttpLogging(logging =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// --- Phase 4: Opaque Error Shield ---
+// Must be first in pipeline to catch all exceptions silently
+app.UseMiddleware<OpaqueErrorMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -56,14 +62,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// --- Domain 31 & 37: Zero Initial Load & Performance ---
-// Configure Static Files with caching policies for production
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
-        // Cache game assets (images, sounds, js) for 7 days in production
         const int durationInSeconds = 60 * 60 * 24 * 7;
         ctx.Context.Response.Headers.Append("Cache-Control", $"public,max-age={durationInSeconds}");
     }
@@ -71,10 +74,15 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseCors("GamePolicy");
 
+// --- Phase 4: Transactional Integrity ---
+app.UseMiddleware<IdempotencyMiddleware>();
+
 // --- API Endpoints ---
 app.MapLeaderboardEndpoints();
+app.MapShootEndpoints();
 
 // Root health check
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();
+
