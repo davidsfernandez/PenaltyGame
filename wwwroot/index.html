@@ -7,51 +7,81 @@
     
     <title>Penalty Challenge | Experiencia Interactiva</title>
     
-    <!-- SEO & Metadata -->
-    <meta name="description" content="Demuestra tu maestría en el campo con el Desafío de Penales. Una experiencia arcade de alta precisión.">
-    <meta name="robots" content="index, follow">
-    
-    <!-- Open Graph (Domain 48) -->
+    <meta name="description" content="Demuestra tu maestría en el campo con el Desafío de Penales.">
     <meta property="og:title" content="Penalty Challenge - ¿Puedes superar el récord?">
-    <meta property="og:description" content="Enfréntate al portero en este desafío de penales interactivo de alta fidelidad.">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="/">
     <meta property="og:image" content="assets/sprites/social-card.png">
     
-    <!-- Styles (Domain 37: Critical Inline Shell would go here, for now linked) -->
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="game-container">
-        <!-- Interaction Layer (Domain 21) -->
         <canvas id="game-canvas"></canvas>
         
-        <!-- Structural Layer (Domain 5) -->
-        <div class="ui-overlay" id="ui-root">
-            <header class="hud">
+        <!-- UI Structural Layer (Domain 5) -->
+        <div class="ui-overlay" id="ui-root" data-state="LANDING">
+            
+            <!-- --- Phase 1: LANDING LAYER --- -->
+            <section class="screen" id="screen-landing">
+                <div class="content-box">
+                    <h1 class="title">PENALTY<br><span class="highlight">CHALLENGE</span></h1>
+                    <p class="subtitle">Ingresa tu código de acceso para jugar</p>
+                    
+                    <div class="input-group">
+                        <input type="text" id="token-input" placeholder="CÓDIGO" maxlength="12">
+                        <button id="btn-validate" class="btn-primary">ENTRAR</button>
+                    </div>
+                    <p id="login-error" class="error-msg" style="display:none"></p>
+                </div>
+            </section>
+
+            <!-- --- Phase 2: HUD LAYER (Active during game) --- -->
+            <header class="hud" id="game-hud" style="display:none">
                 <div class="hud-item score">
                     <span class="label">PUNTUACIÓN</span>
                     <span id="score-value" class="value">0</span>
                 </div>
-                <div class="hud-item level">
-                    <span class="label">NIVEL</span>
-                    <span id="level-value" class="value">1</span>
+                <div class="hud-item streak">
+                    <span class="label">RACHA</span>
+                    <span id="streak-value" class="value">x0</span>
                 </div>
             </header>
 
-            <main class="interaction-prompt">
-                <div id="message-area" class="message animate-pulse">
-                    ¡DESLIZA PARA TIRAR!
+            <!-- --- Phase 3: TUTORIAL LAYER (Domain 42) --- -->
+            <section class="screen" id="screen-tutorial" style="display:none">
+                <div class="tutorial-box">
+                    <div class="ghost-hand" id="tutorial-hand"></div>
+                    <p class="instruction">DESLIZA PARA TIRAR</p>
                 </div>
-            </main>
+            </section>
 
-            <footer class="controls" id="ui-controls">
-                <!-- Administrative or persistent controls -->
-            </footer >
+            <!-- --- Phase 4: RESULTS LAYER (Domain 44) --- -->
+            <section class="screen" id="screen-results" style="display:none">
+                <div class="results-box">
+                    <h2 id="result-title">¡BUEN INTENTO!</h2>
+                    <div class="final-score">
+                        <span class="label">TU PUNTAJE</span>
+                        <span id="final-score-value" class="value">0</span>
+                    </div>
+
+                    <!-- Proximity Ranking (Domain 44) -->
+                    <div class="leaderboard-preview">
+                        <h3>RANKING DE HOY</h3>
+                        <ul id="results-leaderboard" class="proximity-list">
+                            <!-- Populated dynamically -->
+                        </ul>
+                    </div>
+
+                    <div class="actions">
+                        <button id="btn-restart" class="btn-secondary">VOLVER A INTENTAR</button>
+                        <button id="btn-share" class="btn-share">COMPARTIR</button>
+                    </div>
+                </div>
+            </section>
+
+            <div id="message-area" class="message-floating"></div>
         </div>
     </div>
 
-    <!-- Initialization Script (Domain 28 & 31) -->
     <script type="module" src="js/game.js"></script>
 </body>
 </html>
