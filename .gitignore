@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+*.log
+*.user
+*.userosscache
+*.sln.doccache
+
+# Visual Studio
+.vs/
+.vscode/
+
+# Project Specific Exclusions (AI Context & Planning)
+docs/maestro/
+.gemini/
+.gemini_security/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
