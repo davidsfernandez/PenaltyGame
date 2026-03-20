@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 3: Session Persistence (Soft-Lock)
+ * Pure Phaser 3 Implementation - Phase 4: Authenticated Result Submission
  */
 
 const config = {
@@ -33,7 +33,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Session Persistence Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Result Persistence Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -43,10 +43,7 @@ function create() {
     this.streak = 0;
     this.isResolving = false;
     this.gameActive = false;
-    
-    // Auth and Session State
     this.sessionToken = null;
-    this.securitySeal = null;
 
     // UI Cache
     this.screens = {
@@ -71,12 +68,39 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Domain 11: Session Persistence Logic ---
+    // --- Phase 4: Secure Submission Logic ---
+    this.submitScore = async () => {
+        if (!this.sessionToken || this.score === 0) return;
+
+        console.log("[API] Submitting final performance...");
+        try {
+            const rawToken = sessionStorage.getItem('pg_raw_token');
+            const response = await fetch('/api/results', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.sessionToken}` // Secure link (Domain 11)
+                },
+                body: JSON.stringify({
+                    credential: rawToken, // Server uses this to match identity
+                    score: this.score
+                })
+            });
+
+            if (response.ok) {
+                console.log("[API] Score immortalized successfully.");
+            } else {
+                console.error("[API] Failed to persist score.");
+            }
+        } catch (error) {
+            console.error("[API] Communication error during submission:", error);
+        }
+    };
+
+    // --- Auth Logic (Refined from Phase 3) ---
     this.validateToken = async (token) => {
         if (!token) return;
-
         try {
-            console.log("[Auth] Validating session...");
             const response = await fetch(`/api/access/validate?token=${encodeURIComponent(token)}`, {
                 method: 'POST',
                 headers: { 'Accept': 'application/json' }
@@ -84,59 +108,32 @@ function create() {
 
             if (response.ok) {
                 const data = await response.json();
-                
-                // Securely store artifacts (Domain 11)
                 this.sessionToken = data.token;
-                this.securitySeal = data.seal;
-                
-                // Persist raw token for soft-lock recovery
                 sessionStorage.setItem('pg_raw_token', token);
-                
-                console.log("[Auth] Session authorized.");
-                
                 this.showScreen('none');
                 this.screens.hud.classList.remove('hidden');
                 this.gameActive = true;
-                
-                if (this.game.sound.context.state === 'suspended') {
-                    this.game.sound.context.resume();
-                }
             } else {
                 this.screens.error.classList.remove('hidden');
                 sessionStorage.removeItem('pg_raw_token');
             }
-        } catch (error) {
-            console.error("[Auth] Connection error:", error);
-            this.screens.error.innerText = "Error de conexión";
-            this.screens.error.classList.remove('hidden');
-        }
+        } catch (error) { this.screens.error.classList.remove('hidden'); }
     };
 
-    // Manual Entry
     document.getElementById('btn-start').onclick = () => {
-        const token = this.screens.input.value.trim();
-        this.validateToken(token);
+        this.validateToken(this.screens.input.value.trim());
     };
 
-    // Auto-recovery (Soft-Lock)
     const storedToken = sessionStorage.getItem('pg_raw_token');
-    if (storedToken) {
-        console.log("[Auth] Attempting automatic recovery...");
-        this.validateToken(storedToken);
-    }
+    if (storedToken) this.validateToken(storedToken);
 
-    document.getElementById('btn-restart').onclick = () => {
-        window.location.reload(); 
-    };
+    document.getElementById('btn-restart').onclick = () => window.location.reload();
 
-    // World Objects
+    // World
     this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch');
     this.pitch.setAlpha(0.8);
-
     this.goalie = this.physics.add.sprite(centerX, topY, 'goalie').setScale(1.5);
     this.goalie.setImmovable(true);
-    this.goalie.body.setSize(120, 180);
-
     this.ball = this.physics.add.sprite(centerX, bottomY, 'ball').setScale(1.2);
     this.ball.setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
@@ -145,26 +142,24 @@ function create() {
         const relX = predictedX - centerX;
         let zoneModifier = (Math.abs(relX) > 200) ? 0.3 : (Math.abs(relX) < 100 ? 0.9 : 0.5);
         const ddaFactor = Math.min(0.2, this.streak * 0.05);
-        
         const willSave = Math.random() < (zoneModifier + ddaFactor);
         let targetX = willSave ? predictedX : (predictedX > centerX ? predictedX - 300 : predictedX + 300);
-
-        this.tweens.add({
-            targets: this.goalie,
-            x: Phaser.Math.Clamp(targetX, centerX - 400, centerX + 400),
-            duration: 350,
-            ease: 'Cubic.easeOut'
-        });
+        this.tweens.add({ targets: this.goalie, x: Phaser.Math.Clamp(targetX, centerX - 400, centerX + 400), duration: 350, ease: 'Cubic.easeOut' });
     };
 
     this.physics.add.overlap(this.ball, this.goalie, () => {
         if (this.isResolving) return;
         this.isResolving = true;
         this.ball.setVelocity(0, 0).setAccelerationX(0);
-        this.streak = 0;
-        this.updateUI();
         this.cameras.main.shake(200, 0.01);
-        this.time.delayedCall(1500, () => this.resetMatch());
+        
+        // Save and Transition
+        this.submitScore(); // Async trigger
+        this.time.delayedCall(1500, () => {
+            this.screens.finalScore.innerText = this.score;
+            this.showScreen('results');
+            this.gameActive = false;
+        });
     });
 
     this.input.on('pointerdown', (pointer) => {
@@ -175,15 +170,13 @@ function create() {
     this.input.on('pointerup', (pointer) => {
         if (!this.gameActive || this.isResolving) return;
         if (pointer.time - this.startTime < 50) return;
-
-        const deltaX = (pointer.x - this.startX) / this.sys.game.config.width;
-        const deltaY = (pointer.y - this.startY) / this.sys.game.config.height;
-
-        if (deltaY < -0.05) {
-            const power = 12500;
-            this.ball.setVelocity(deltaX * power, deltaY * power);
-            this.ball.setAccelerationX(deltaX * 2500);
-            this.moveGoalie(centerX + (deltaX * 1000));
+        const dX = (pointer.x - this.startX) / this.sys.game.config.width;
+        const dY = (pointer.y - this.startY) / this.sys.game.config.height;
+        if (dY < -0.05) {
+            const p = 12500;
+            this.ball.setVelocity(dX * p, dY * p);
+            this.ball.setAccelerationX(dX * 2500);
+            this.moveGoalie(centerX + (dX * 1000));
         }
     });
 
@@ -196,33 +189,27 @@ function create() {
 
 function update() {
     if (!this.gameActive) return;
-
     if (this.ball.active && this.ball.y < this.sys.game.config.height - 300) {
         const progress = Phaser.Math.Clamp(( (this.sys.game.config.height - 250) - this.ball.y) / 1300, 0, 1);
         this.ball.setScale(1.2 - (progress * 0.6));
     }
-
     if (!this.isResolving && this.ball.y < 250) {
         this.isResolving = true;
         this.ball.setVelocity(0, 0).setAccelerationX(0);
-        
         if (Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300) {
             this.cameras.main.flash(200, 0, 242, 96, 0.3);
             this.streak++;
             this.score += (100 * this.streak);
+            this.updateUI();
+            this.time.delayedCall(1500, () => this.resetMatch());
         } else {
-            this.streak = 0;
-        }
-        
-        this.updateUI();
-        this.time.delayedCall(1500, () => {
-            if (this.streak === 0 && this.score > 0) {
+            // Missed: Resolve game
+            this.submitScore();
+            this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;
                 this.showScreen('results');
                 this.gameActive = false;
-            } else {
-                this.resetMatch();
-            }
-        });
+            });
+        }
     }
 }
