@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 3: Secure Handshake Auth
+ * Pure Phaser 3 Implementation - Phase 3: Session Persistence (Soft-Lock)
  */
 
 const config = {
@@ -33,7 +33,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Auth Handshake Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Session Persistence Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -71,13 +71,12 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Phase 3: Real Auth Handshake ---
-    const handleAuthSubmit = async () => {
-        const token = this.screens.input.value.trim();
+    // --- Domain 11: Session Persistence Logic ---
+    this.validateToken = async (token) => {
         if (!token) return;
 
         try {
-            console.log("[Auth] Contacting Server Boundary...");
+            console.log("[Auth] Validating session...");
             const response = await fetch(`/api/access/validate?token=${encodeURIComponent(token)}`, {
                 method: 'POST',
                 headers: { 'Accept': 'application/json' }
@@ -90,31 +89,44 @@ function create() {
                 this.sessionToken = data.token;
                 this.securitySeal = data.seal;
                 
-                console.log("[Auth] Handshake successful. Session established.");
+                // Persist raw token for soft-lock recovery
+                sessionStorage.setItem('pg_raw_token', token);
+                
+                console.log("[Auth] Session authorized.");
                 
                 this.showScreen('none');
                 this.screens.hud.classList.remove('hidden');
                 this.gameActive = true;
                 
-                // Initialize audio on first user gesture (Browser policy)
                 if (this.game.sound.context.state === 'suspended') {
                     this.game.sound.context.resume();
                 }
             } else {
                 this.screens.error.classList.remove('hidden');
-                console.warn("[Auth] Invalid credential provided.");
+                sessionStorage.removeItem('pg_raw_token');
             }
         } catch (error) {
-            console.error("[Auth] Communication failure:", error);
-            this.screens.error.innerText = "Error de conexión con el estadio";
+            console.error("[Auth] Connection error:", error);
+            this.screens.error.innerText = "Error de conexión";
             this.screens.error.classList.remove('hidden');
         }
     };
 
-    document.getElementById('btn-start').onclick = handleAuthSubmit;
+    // Manual Entry
+    document.getElementById('btn-start').onclick = () => {
+        const token = this.screens.input.value.trim();
+        this.validateToken(token);
+    };
+
+    // Auto-recovery (Soft-Lock)
+    const storedToken = sessionStorage.getItem('pg_raw_token');
+    if (storedToken) {
+        console.log("[Auth] Attempting automatic recovery...");
+        this.validateToken(storedToken);
+    }
 
     document.getElementById('btn-restart').onclick = () => {
-        window.location.reload(); // Hard reset for session integrity (Domain 32)
+        window.location.reload(); 
     };
 
     // World Objects
