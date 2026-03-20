@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 2: Physics Normalization
+ * Pure Phaser 3 Implementation - Phase 2: Organic Ball Physics
  */
 
 const config = {
@@ -36,7 +36,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Physics Normalization Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Organic Physics Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -47,7 +47,7 @@ function create() {
     this.isResolving = false;
     this.gameActive = false;
 
-    // UI Cache
+    // UI Elements Mapping
     this.screens = {
         welcome: document.getElementById('screen-welcome'),
         results: document.getElementById('screen-results'),
@@ -68,7 +68,7 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // Interaction Bindings
+    // Events
     document.getElementById('btn-start').onclick = () => {
         this.showScreen('none');
         this.screens.hud.classList.remove('hidden');
@@ -83,7 +83,7 @@ function create() {
         this.gameActive = true;
     };
 
-    // World Objects
+    // World
     this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch');
     this.pitch.setAlpha(0.8);
 
@@ -95,7 +95,7 @@ function create() {
     this.ball.setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
 
-    // AI & Physics Logic
+    // AI & Physics
     this.moveGoalie = () => {
         const targetX = Phaser.Math.Between(centerX - 350, centerX + 350);
         this.tweens.add({ targets: this.goalie, x: targetX, duration: 400, ease: 'Cubic.easeOut' });
@@ -105,6 +105,7 @@ function create() {
         if (this.isResolving) return;
         this.isResolving = true;
         this.ball.setVelocity(0, 0);
+        this.ball.setAccelerationX(0); // Stop curve on impact
         this.streak = 0;
         this.updateUI();
         this.cameras.main.shake(200, 0.01);
@@ -122,39 +123,53 @@ function create() {
         if (!this.gameActive || this.isResolving) return;
         
         const duration = pointer.time - this.startTime;
-        if (duration < 50) return; // Anti-click (Domain 14)
+        if (duration < 50) return;
 
-        // --- Domain 27: Interaction Normalization ---
-        // Calculate deltas relative to viewport size (UAS units)
-        const normalizedDeltaX = (pointer.x - this.startX) / this.sys.game.config.width;
-        const normalizedDeltaY = (pointer.y - this.startY) / this.sys.game.config.height;
+        const deltaX = (pointer.x - this.startX) / this.sys.game.config.width;
+        const deltaY = (pointer.y - this.startY) / this.sys.game.config.height;
 
-        // Constraint: Only upward swipes (Domain 28)
-        if (normalizedDeltaY < -0.05) {
-            // Apply force based on normalized units to ensure cross-device parity
-            // Multiplier represents "Pixels per Second" in the 1080p logical space
-            const powerFactor = 12000; 
+        if (deltaY < -0.05) {
+            const powerFactor = 12000;
+            this.ball.setVelocity(deltaX * powerFactor, deltaY * powerFactor);
             
-            const velX = normalizedDeltaX * powerFactor;
-            const velY = normalizedDeltaY * powerFactor;
+            // --- Domain 24: Magnus Effect (Simulated Curve) ---
+            // We apply a lateral acceleration based on the horizontal deviation
+            const curveStrength = deltaX * 2500; 
+            this.ball.setAccelerationX(curveStrength);
 
-            this.ball.setVelocity(velX, velY);
             this.moveGoalie();
-            console.log(`[Physics] Normalized Shot: ΔX=${normalizedDeltaX.toFixed(3)}, ΔY=${normalizedDeltaY.toFixed(3)}`);
+            console.log(`[Physics] Shot Fired. Curve Acceleration: ${curveStrength.toFixed(2)}`);
         }
     });
 
     this.resetMatch = () => {
-        this.ball.setPosition(centerX, bottomY).setVelocity(0, 0);
+        this.ball.setPosition(centerX, bottomY).setVelocity(0, 0).setAccelerationX(0).setScale(1.2);
         this.goalie.setPosition(centerX, topY);
         this.isResolving = false;
     };
 }
 
 function update() {
-    if (this.gameActive && !this.isResolving && this.ball.y < 250) {
+    if (!this.gameActive) return;
+
+    // --- Domain 29: Visual Depth Interpolation ---
+    // Scale ball down as it moves up (simulating depth)
+    if (this.ball.active && this.ball.y < this.sys.game.config.height - 300) {
+        const minScale = 0.5;
+        const maxScale = 1.2;
+        const startY = this.sys.game.config.height - 250;
+        const endY = 400;
+        
+        const progress = Phaser.Math.Clamp((startY - this.ball.y) / (startY - endY), 0, 1);
+        const currentScale = maxScale - (progress * (maxScale - minScale));
+        this.ball.setScale(currentScale);
+    }
+
+    // Goal Detection
+    if (!this.isResolving && this.ball.y < 250) {
         this.isResolving = true;
         this.ball.setVelocity(0, 0);
+        this.ball.setAccelerationX(0);
         
         this.cameras.main.flash(200, 0, 242, 96, 0.3);
         this.streak++;
