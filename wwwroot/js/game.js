@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 4: Leaderboard UI Visualization
+ * Pure Phaser 3 Implementation - Phase 5: Offline Resilience & Vault
  */
 
 const config = {
@@ -33,7 +33,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Leaderboard UI Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Resilience & Vault Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -69,47 +69,78 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Phase 4: Dynamic Leaderboard Loading ---
-    this.loadLeaderboard = async () => {
-        if (!this.screens.leaderboard) return;
+    // --- Domain 33: Local Vault Logic ---
+    this.syncOfflineScores = async () => {
+        const pending = localStorage.getItem('pg_pending_score');
+        if (!pending || !this.sessionToken) return;
 
-        // Clear and show loading state
-        this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.5;">Cargando clasificación...</td></tr>';
-
+        console.log("[Resilience] Found unsynced score in vault. Retrying...");
+        const payload = JSON.parse(pending);
+        
         try {
-            const response = await fetch('/api/leaderboard');
-            const result = await response.json();
+            const response = await fetch('/api/results', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${this.sessionToken}` 
+                },
+                body: JSON.stringify(payload)
+            });
 
-            if (result.success) {
-                this.screens.leaderboard.innerHTML = ''; // Clear loading
-
-                result.data.forEach((entry, index) => {
-                    const row = document.createElement('tr');
-                    // Domain 18: Alias is already ofuscated by server
-                    row.innerHTML = `
-                        <td style="padding:16px; font-weight:900; opacity:0.3; font-style:italic;">#${index + 1}</td>
-                        <td style="padding:16px; font-weight:700; letter-spacing:-0.5px;">${entry.alias}</td>
-                        <td style="padding:16px; text-align:right; font-weight:900; color:#00f260;">${entry.value.toLocaleString()}</td>
-                    `;
-                    this.screens.leaderboard.appendChild(row);
-                });
+            if (response.ok) {
+                console.log("[Resilience] Vault synchronized successfully.");
+                localStorage.removeItem('pg_pending_score');
             }
-        } catch (error) {
-            console.error("[API] Failed to load leaderboard:", error);
-            this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px;">Error al conectar con el servidor</td></tr>';
+        } catch (e) {
+            console.warn("[Resilience] Synchronization failed. Keeping data in vault.");
         }
     };
 
     this.submitScore = async () => {
         if (!this.sessionToken || this.score === 0) return;
+
+        const rawToken = sessionStorage.getItem('pg_raw_token');
+        const payload = { credential: rawToken, score: this.score };
+
+        // 1. Secure in vault first (Domain 33)
+        localStorage.setItem('pg_pending_score', JSON.stringify(payload));
+
+        console.log("[API] Attempting score transmission...");
         try {
-            const rawToken = sessionStorage.getItem('pg_raw_token');
-            await fetch('/api/results', {
+            const response = await fetch('/api/results', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.sessionToken}` },
-                body: JSON.stringify({ credential: rawToken, score: this.score })
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${this.sessionToken}` 
+                },
+                body: JSON.stringify(payload)
             });
-        } catch (e) { console.error(e); }
+
+            if (response.ok) {
+                // 2. If server confirms, clear vault
+                localStorage.removeItem('pg_pending_score');
+                console.log("[API] Score synchronized.");
+            }
+        } catch (error) {
+            console.error("[Resilience] Network failure. Score remains secured in Local Vault.");
+        }
+    };
+
+    this.loadLeaderboard = async () => {
+        if (!this.screens.leaderboard) return;
+        this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.5;">Cargando clasificación...</td></tr>';
+        try {
+            const response = await fetch('/api/leaderboard');
+            const result = await response.json();
+            if (result.success) {
+                this.screens.leaderboard.innerHTML = '';
+                result.data.forEach((entry, index) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td style="padding:16px; font-weight:900; opacity:0.3;">#${index + 1}</td><td style="padding:16px;">${entry.alias}</td><td style="padding:16px; text-align:right; font-weight:900; color:#00f260;">${entry.value.toLocaleString()}</td>`;
+                    this.screens.leaderboard.appendChild(row);
+                });
+            }
+        } catch (e) { this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center;">Servidor no disponible</td></tr>'; }
     };
 
     this.validateToken = async (token) => {
@@ -126,10 +157,13 @@ function create() {
                 this.showScreen('none');
                 this.screens.hud.classList.remove('hidden');
                 this.gameActive = true;
+                
+                // Trigger sync sentinel
+                this.syncOfflineScores();
             } else {
                 this.screens.error.classList.remove('hidden');
             }
-        } catch (e) { this.screens.error.classList.remove('hidden'); }
+        } catch (error) { this.screens.error.classList.remove('hidden'); }
     };
 
     document.getElementById('btn-start').onclick = () => this.validateToken(this.screens.input.value.trim());
@@ -150,7 +184,8 @@ function create() {
     this.moveGoalie = (predictedX) => {
         const relX = predictedX - centerX;
         let zoneModifier = (Math.abs(relX) > 200) ? 0.3 : (Math.abs(relX) < 100 ? 0.9 : 0.5);
-        const willSave = Math.random() < (zoneModifier + Math.min(0.2, this.streak * 0.05));
+        const ddaFactor = Math.min(0.2, this.streak * 0.05);
+        const willSave = Math.random() < (zoneModifier + ddaFactor);
         let targetX = willSave ? predictedX : (predictedX > centerX ? predictedX - 300 : predictedX + 300);
         this.tweens.add({ targets: this.goalie, x: Phaser.Math.Clamp(targetX, centerX - 400, centerX + 400), duration: 350, ease: 'Cubic.easeOut' });
     };
@@ -163,7 +198,7 @@ function create() {
         this.submitScore();
         this.time.delayedCall(1500, () => {
             this.screens.finalScore.innerText = this.score;
-            this.loadLeaderboard(); // Load real data now
+            this.loadLeaderboard();
             this.showScreen('results');
             this.gameActive = false;
         });
@@ -212,7 +247,7 @@ function update() {
             this.submitScore();
             this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;
-                this.loadLeaderboard(); // Load real data now
+                this.loadLeaderboard();
                 this.showScreen('results');
                 this.gameActive = false;
             });
