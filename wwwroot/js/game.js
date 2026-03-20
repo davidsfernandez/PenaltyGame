@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 2: Organic Ball Physics
+ * Pure Phaser 3 Implementation - Phase 2: AI Goalie Refinement (DDA)
  */
 
 const config = {
@@ -15,10 +15,7 @@ const config = {
     },
     physics: {
         default: 'arcade',
-        arcade: { 
-            gravity: { y: 0 }, 
-            debug: false 
-        }
+        arcade: { gravity: { y: 0 }, debug: false }
     },
     scene: {
         preload: preload,
@@ -36,7 +33,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Organic Physics Phase.");
+    console.log("[Engine] Phaser 3 Initialized. AI Refinement Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -83,7 +80,7 @@ function create() {
         this.gameActive = true;
     };
 
-    // World
+    // World Objects
     this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch');
     this.pitch.setAlpha(0.8);
 
@@ -95,33 +92,60 @@ function create() {
     this.ball.setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
 
-    // AI & Physics
-    this.moveGoalie = () => {
-        const targetX = Phaser.Math.Between(centerX - 350, centerX + 350);
-        this.tweens.add({ targets: this.goalie, x: targetX, duration: 400, ease: 'Cubic.easeOut' });
+    // --- Domain 22: AI Decision Tree ---
+    this.aiDecision = { willSave: false, targetX: centerX };
+
+    this.moveGoalie = (predictedX, predictedY) => {
+        // 1. Zonal Probability Matrix (Domain 22)
+        // Horizontal: Left (-350 to -150), Center (-150 to 150), Right (150 to 350)
+        const relX = predictedX - centerX;
+        let zoneModifier = 0.5; // Default
+
+        if (Math.abs(relX) > 200) zoneModifier = 0.3; // Corners are harder
+        else if (Math.abs(relX) < 100) zoneModifier = 0.9; // Center is easier
+
+        // 2. Dynamic Difficulty Adjustment (Domain 25)
+        // High streak increases goalie skill
+        const ddaFactor = Math.min(0.2, this.streak * 0.05);
+        const saveProbability = zoneModifier + ddaFactor;
+
+        // 3. The Decision
+        this.aiDecision.willSave = Math.random() < saveProbability;
+        
+        // 4. Execution (Tween)
+        // If save: move to the ball. If fail: move away or stay late.
+        let targetX = predictedX;
+        if (!this.aiDecision.willSave) {
+            targetX = (predictedX > centerX) ? predictedX - 300 : predictedX + 300;
+        }
+
+        this.tweens.add({
+            targets: this.goalie,
+            x: Phaser.Math.Clamp(targetX, centerX - 400, centerX + 400),
+            duration: 350,
+            ease: 'Cubic.easeOut'
+        });
     };
 
     this.physics.add.overlap(this.ball, this.goalie, () => {
         if (this.isResolving) return;
         this.isResolving = true;
-        this.ball.setVelocity(0, 0);
-        this.ball.setAccelerationX(0); // Stop curve on impact
+        this.ball.setVelocity(0, 0).setAccelerationX(0);
+        
         this.streak = 0;
         this.updateUI();
         this.cameras.main.shake(200, 0.01);
+        console.log("[AI] Save successful.");
         this.time.delayedCall(1500, () => this.resetMatch());
     });
 
     this.input.on('pointerdown', (pointer) => {
         if (!this.gameActive || this.isResolving) return;
-        this.startX = pointer.x;
-        this.startY = pointer.y;
-        this.startTime = pointer.time;
+        this.startX = pointer.x; this.startY = pointer.y; this.startTime = pointer.time;
     });
 
     this.input.on('pointerup', (pointer) => {
         if (!this.gameActive || this.isResolving) return;
-        
         const duration = pointer.time - this.startTime;
         if (duration < 50) return;
 
@@ -129,16 +153,14 @@ function create() {
         const deltaY = (pointer.y - this.startY) / this.sys.game.config.height;
 
         if (deltaY < -0.05) {
-            const powerFactor = 12000;
-            this.ball.setVelocity(deltaX * powerFactor, deltaY * powerFactor);
-            
-            // --- Domain 24: Magnus Effect (Simulated Curve) ---
-            // We apply a lateral acceleration based on the horizontal deviation
-            const curveStrength = deltaX * 2500; 
-            this.ball.setAccelerationX(curveStrength);
+            const power = 12500;
+            this.ball.setVelocity(deltaX * power, deltaY * power);
+            this.ball.setAccelerationX(deltaX * 2500);
 
-            this.moveGoalie();
-            console.log(`[Physics] Shot Fired. Curve Acceleration: ${curveStrength.toFixed(2)}`);
+            // Predict ball landing position roughly (Domain 22)
+            // Logic: linear projection based on velocity
+            const predictedX = centerX + (deltaX * 1000); 
+            this.moveGoalie(predictedX, topY);
         }
     });
 
@@ -152,30 +174,37 @@ function create() {
 function update() {
     if (!this.gameActive) return;
 
-    // --- Domain 29: Visual Depth Interpolation ---
-    // Scale ball down as it moves up (simulating depth)
     if (this.ball.active && this.ball.y < this.sys.game.config.height - 300) {
-        const minScale = 0.5;
-        const maxScale = 1.2;
-        const startY = this.sys.game.config.height - 250;
-        const endY = 400;
-        
-        const progress = Phaser.Math.Clamp((startY - this.ball.y) / (startY - endY), 0, 1);
-        const currentScale = maxScale - (progress * (maxScale - minScale));
-        this.ball.setScale(currentScale);
+        const progress = Phaser.Math.Clamp(( (this.sys.game.config.height - 250) - this.ball.y) / 1300, 0, 1);
+        this.ball.setScale(1.2 - (progress * 0.6));
     }
 
-    // Goal Detection
+    // Goal Detection (Domain 23)
     if (!this.isResolving && this.ball.y < 250) {
         this.isResolving = true;
-        this.ball.setVelocity(0, 0);
-        this.ball.setAccelerationX(0);
+        this.ball.setVelocity(0, 0).setAccelerationX(0);
         
-        this.cameras.main.flash(200, 0, 242, 96, 0.3);
-        this.streak++;
-        this.score += (100 * this.streak);
+        const isWithinGoal = Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300;
+
+        if (isWithinGoal) {
+            this.cameras.main.flash(200, 0, 242, 96, 0.3);
+            this.streak++;
+            this.score += (100 * this.streak);
+            console.log("[Logic] Goal scored.");
+        } else {
+            this.streak = 0;
+            console.log("[Logic] Missed target.");
+        }
+        
         this.updateUI();
-        
-        this.time.delayedCall(1500, () => this.resetMatch());
+        this.time.delayedCall(1500, () => {
+            if (this.streak === 0 && this.score > 0) {
+                this.screens.finalScore.innerText = this.score;
+                this.showScreen('results');
+                this.gameActive = false;
+            } else {
+                this.resetMatch();
+            }
+        });
     }
 }
