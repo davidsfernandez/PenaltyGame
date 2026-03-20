@@ -18,16 +18,48 @@
             width: 100%; height: 100%;
             display: flex; justify-content: center; align-items: center;
         }
-        /* UI Layer for later prompts */
+        
+        /* UI Layer (HUD) */
         #ui-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; z-index: 10;
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: 20px;
         }
+
+        .hud-container {
+            display: flex; justify-content: space-between;
+            width: 100%; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .hud-item {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
+
+        .hud-label { font-size: 12px; font-weight: bold; display: block; opacity: 0.8; }
+        .hud-value { font-size: 24px; font-weight: 900; color: #00f260; }
     </style>
 </head>
 <body>
     <div id="game-container"></div>
-    <div id="ui-overlay"></div>
+    
+    <div id="ui-overlay">
+        <!-- HUD Structure (Spanish) -->
+        <header class="hud-container">
+            <div class="hud-item">
+                <span class="hud-label">PUNTUACIÓN</span>
+                <span id="score-display" class="hud-value">0</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">RACHA</span>
+                <span id="streak-display" class="hud-value">x0</span>
+            </div>
+        </header>
+    </div>
 
     <script type="module" src="js/game.js"></script>
 </body>
