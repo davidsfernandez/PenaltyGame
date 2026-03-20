@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase C: Social Sharing & UI Refinement
+ * Pure Phaser 3 Implementation - Infrastructure Stability & Cleanup
  */
 
 const config = {
@@ -31,13 +31,16 @@ function preload() {
     this.load.image('goalie', 'assets/sprites/goalie_idle.png');
     this.load.image('pitch', 'assets/sprites/pitch.png');
     this.load.image('hand', 'assets/sprites/hand_icon.png');
-    this.load.audio('kick', 'https://labs.phaser.io/assets/audio/SoundEffects/squit.mp3');
-    this.load.audio('goal', 'https://labs.phaser.io/assets/audio/SoundEffects/success.mp3');
-    this.load.audio('miss', 'https://labs.phaser.io/assets/audio/SoundEffects/p-achoo.mp3');
+
+    // --- FIX: Loading from LOCAL paths to avoid CORS issues ---
+    // Note: Assets should be placed in wwwroot/assets/audio/
+    this.load.audio('kick', 'assets/audio/kick.mp3');
+    this.load.audio('goal', 'assets/audio/goal.mp3');
+    this.load.audio('miss', 'assets/audio/miss.mp3');
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Social Integration Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Stability Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -47,6 +50,8 @@ function create() {
     this.streak = 0;
     this.isResolving = false;
     this.gameActive = false;
+    this.isValidating = false; // Flag to prevent multiple concurrent API calls (Fixes DB noise)
+    
     this.sessionToken = null;
     this.securitySeal = null;
     this.sessionSeed = "seed-123";
@@ -77,70 +82,18 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Domain 48: Social Sharing Logic ---
-    this.shareResult = async () => {
-        const text = `¡Acabo de lograr ${this.score.toLocaleString()} puntos en Penalty Challenge! ¿Podrás superar mi racha de x${this.streak}? Juega aquí:`;
-        const url = window.location.href;
-
-        if (navigator.share) {
-            try {
-                await navigator.share({ title: 'Penalty Challenge', text: text, url: url });
-                console.log("[Social] Share successful.");
-            } catch (e) { console.log("[Social] Share cancelled."); }
-        } else {
-            // Fallback: Copy to clipboard
-            navigator.clipboard.writeText(`${text} ${url}`);
-            alert("¡Mensaje copiado al portapapeles! Compártelo con tus amigos.");
-        }
-    };
-
-    this.loadLeaderboard = async () => {
-        if (!this.screens.leaderboard) return;
-        this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.5;">Cargando clasificación...</td></tr>';
-
+    // --- Auth Logic with Concurrent Protection ---
+    this.validateToken = async (token) => {
+        if (!token || this.isValidating) return;
+        
+        this.isValidating = true; // Lock
         try {
-            const rawToken = sessionStorage.getItem('pg_raw_token');
-            const myAlias = rawToken ? rawToken.substring(0, 3) + "***" : "TÚ";
+            console.log("[Auth] Validating session boundary...");
+            const response = await fetch(`/api/access/validate?token=${encodeURIComponent(token)}`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' }
+            });
 
-            const response = await fetch('/api/leaderboard');
-            const result = await response.json();
-
-            if (result.success) {
-                this.screens.leaderboard.innerHTML = '';
-                result.data.forEach((entry, index) => {
-                    const row = document.createElement('tr');
-                    const isCurrentUser = (entry.alias === myAlias);
-                    
-                    row.style.background = isCurrentUser ? 'rgba(0, 242, 96, 0.1)' : 'transparent';
-                    row.style.color = isCurrentUser ? '#00f260' : 'white';
-
-                    row.innerHTML = `
-                        <td style="padding:14px 20px; font-weight:900; opacity:0.3;">${index + 1}</td>
-                        <td style="padding:14px 20px; font-weight:700;">${entry.alias} ${isCurrentUser ? '<b>(TÚ)</b>' : ''}</td>
-                        <td style="padding:14px 20px; text-align:right; font-weight:900;">${entry.value.toLocaleString()}</td>
-                    `;
-                    this.screens.leaderboard.appendChild(row);
-                });
-            }
-        } catch (error) {
-            this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px;">Sin conexión</td></tr>';
-        }
-    };
-
-    this.submitScore = async () => {
-        if (!this.sessionToken || this.score === 0) return;
-        try {
-            const rawToken = sessionStorage.getItem('pg_raw_token');
-            const signature = await this.generateSignature(this.score);
-            const payload = { credential: rawToken, score: this.score, signature: signature, durationMs: this.lastShotTelemetry.durationMs, distanceNormalized: this.lastShotTelemetry.distanceNormalized, curvature: this.lastShotTelemetry.curvature };
-            await fetch('/api/results', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.sessionToken}` }, body: JSON.stringify(payload) });
-        } catch (e) { console.error("[API] Submission failed."); }
-    };
-
-    const validateToken = async (token) => {
-        if (!token) return;
-        try {
-            const response = await fetch(`/api/access/validate?token=${encodeURIComponent(token)}`, { method: 'POST', headers: { 'Accept': 'application/json' } });
             if (response.ok) {
                 const data = await response.json();
                 this.sessionToken = data.token;
@@ -148,14 +101,28 @@ function create() {
                 sessionStorage.setItem('pg_raw_token', token);
                 this.showScreen('tutorial');
                 this.gameActive = false;
-            } else { this.screens.error.classList.remove('hidden'); }
-        } catch (error) { this.screens.error.classList.remove('hidden'); }
+            } else {
+                this.screens.error.classList.remove('hidden');
+                sessionStorage.removeItem('pg_raw_token');
+            }
+        } catch (e) { 
+            this.screens.error.classList.remove('hidden'); 
+        } finally {
+            this.isValidating = false; // Release
+        }
     };
 
-    document.getElementById('btn-start').onclick = () => validateToken(this.screens.input.value.trim());
+    document.getElementById('btn-start').onclick = () => this.validateToken(this.screens.input.value.trim());
     document.getElementById('btn-restart').onclick = () => window.location.reload();
     document.getElementById('btn-share').onclick = () => this.shareResult();
 
+    // Auto-recovery - Only if not already validating
+    const storedToken = sessionStorage.getItem('pg_raw_token');
+    if (storedToken && !this.isValidating) {
+        this.validateToken(storedToken);
+    }
+
+    // World & UI
     this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch').setAlpha(0.8);
     this.goalie = this.physics.add.sprite(centerX, topY, 'goalie').setScale(1.5).setImmovable(true);
     this.ball = this.physics.add.sprite(centerX, bottomY, 'ball').setScale(1.2).setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
@@ -193,7 +160,12 @@ function create() {
             this.lastShotTelemetry.curvature = dX;
             this.ball.setVelocity(dX * 13000, dY * 13000);
             this.ball.setAccelerationX(dX * 2500);
-            this.sound.play('kick', { volume: 0.6, pan: Phaser.Math.Clamp((pointer.x - centerX) / (this.sys.game.config.width / 2), -1, 1) });
+            
+            // Check if audio key exists before playing to avoid crash
+            if (this.cache.audio.exists('kick')) {
+                this.sound.play('kick', { volume: 0.6, pan: Phaser.Math.Clamp((pointer.x - centerX) / (this.sys.game.config.width / 2), -1, 1) });
+            }
+
             const relX = (centerX + (dX * 1000)) - centerX;
             const willSave = Math.random() < ((Math.abs(relX) > 200) ? 0.3 : 0.85);
             let targetX = willSave ? centerX + (dX * 1000) : (dX > 0 ? centerX - 300 : centerX + 300);
@@ -218,9 +190,6 @@ function create() {
 }
 
 function update(time, delta) {
-    if (!this.gameActive && this.state === 'TUTORIAL' && this.tutorialHand && !this.tweens.isTweening(this.tutorialHand)) {
-        this.startTutorialAnimation();
-    }
     if (!this.gameActive) return;
     if (this.ball.active && this.ball.y < this.sys.game.config.height - 300) {
         const progress = Phaser.Math.Clamp(((this.sys.game.config.height - 250) - this.ball.y) / 1300, 0, 1);
@@ -231,13 +200,13 @@ function update(time, delta) {
         this.ball.setVelocity(0, 0).setAccelerationX(0);
         const isGoal = Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300;
         if (isGoal) {
-            this.sound.play('goal', { volume: 1 });
+            if (this.cache.audio.exists('goal')) this.sound.play('goal', { volume: 1 });
             this.cameras.main.flash(200, 0, 242, 96, 0.3);
             this.streak++; this.score += (100 * this.streak);
             this.updateUI();
             this.time.delayedCall(1500, () => this.resetMatch());
         } else {
-            this.sound.play('miss', { volume: 0.5 });
+            if (this.cache.audio.exists('miss')) this.sound.play('miss', { volume: 0.5 });
             this.submitScore();
             this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;
