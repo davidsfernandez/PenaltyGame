@@ -3,173 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Penalty Challenge | Phaser 3 Production</title>
-    
-    <!-- Phaser 3 Engine -->
+    <title>Penalty Challenge</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-    
-    <!-- Typography -->
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:wght@400;900&display=swap" rel="stylesheet">
-    
     <style>
-        :root {
-            --primary: #00f260;
-            --accent: #00d2ff;
-            --error: #ff4b2b;
-            --bg-glass: rgba(0, 0, 0, 0.85);
-            --border-glass: rgba(255, 255, 255, 0.1);
-        }
-
-        body, html {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; background-color: #000;
-            font-family: 'Roboto', sans-serif;
-        }
-
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #222; }
         #game-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-        
-        #ui-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 10;
-            display: flex; flex-direction: column;
-        }
-
-        .screen {
-            position: absolute; inset: 0;
-            display: flex; align-items: center; justify-content: center;
-            background: radial-gradient(circle at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.8) 100%);
-            pointer-events: auto;
-            transition: opacity 0.5s ease, visibility 0.5s;
-            opacity: 0; visibility: hidden;
-        }
-        .screen.active { opacity: 1; visibility: visible; }
-
-        .glass-panel {
-            background: var(--bg-glass);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid var(--border-glass);
-            border-radius: 30px;
-            padding: 40px;
-            text-align: center;
-            color: white;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
-            max-width: 450px; width: 95%;
-        }
-
-        h1, h2, h3 { font-family: 'Bebas Neue', cursive; letter-spacing: 2px; }
-        .title { font-size: 4rem; line-height: 0.9; margin-bottom: 10px; }
-        .highlight { color: var(--primary); }
-
-        /* HUD */
-        .hud-container {
-            display: flex; justify-content: space-between;
-            padding: 20px; color: white; width: 100%; pointer-events: none;
-        }
-        .hud-item {
-            background: var(--bg-glass);
-            padding: 10px 25px; border-radius: 15px; border: 1px solid var(--border-glass);
-            text-align: center; pointer-events: auto;
-        }
-        .hud-label { font-size: 10px; font-weight: 900; opacity: 0.6; letter-spacing: 1px; }
-        .hud-value { font-size: 28px; font-family: 'Bebas Neue'; color: var(--primary); }
-
-        /* Buttons */
-        .btn {
-            border: none; padding: 18px 40px; border-radius: 15px;
-            font-family: 'Bebas Neue'; font-size: 1.8rem;
-            cursor: pointer; transition: transform 0.1s, background 0.2s;
-            width: 100%; pointer-events: auto;
-        }
-        .btn-primary { background: var(--primary); color: black; }
-        .btn-secondary { background: white; color: black; margin-top: 10px; }
-        .btn-share { background: var(--accent); color: white; margin-top: 10px; }
-        
-        .btn:hover { filter: brightness(1.1); }
-        .btn:active { transform: scale(0.96); }
-
-        /* Pause Screen & Countdown */
-        #screen-pause { background: rgba(0,0,0,0.9); }
-        .countdown-text { 
-            font-size: 8rem; font-family: 'Bebas Neue'; color: var(--primary); 
-            text-shadow: 0 0 30px var(--primary); animation: pulse 1s infinite;
-        }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-
-        /* Leaderboard Table */
-        .leaderboard-container {
-            margin: 20px 0; background: rgba(255,255,255,0.03); 
-            border-radius: 20px; overflow: hidden; border: 1px solid var(--border-glass);
-        }
-        .leaderboard-table { width: 100%; border-collapse: collapse; text-align: left; }
-        .leaderboard-table th { 
-            padding: 12px 20px; font-size: 10px; text-transform: uppercase; 
-            opacity: 0.4; background: rgba(255,255,255,0.05); font-weight: 900;
-        }
-        .leaderboard-table td { 
-            padding: 14px 20px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.03); 
-        }
-
-        .hidden { display: none !important; }
+        #ui-layer { position: absolute; top: 10%; width: 100%; text-align: center; pointer-events: none; color: white; font-family: sans-serif; font-size: 2rem; font-weight: bold; text-shadow: 2px 2px 4px #000; }
     </style>
 </head>
 <body>
-    <div id="game-container"></div>
-    
-    <div id="ui-overlay">
-        <header id="game-hud" class="hud-container hidden">
-            <div class="hud-item"><span class="hud-label">PUNTUACIÃ“N</span><span id="score-display" class="hud-value">0</span></div>
-            <div class="hud-item"><span class="hud-label">RACHA</span><span id="streak-display" class="hud-value">x0</span></div>
-        </header>
-
-        <!-- Welcome -->
-        <section id="screen-welcome" class="screen active">
-            <div class="glass-panel">
-                <h1 class="title">PENALTY<br><span class="highlight">CHALLENGE</span></h1>
-                <p style="opacity: 0.6; margin-bottom: 5px;">PROYECTO DE PRODUCCIÃ“N FINAL</p>
-                <div style="margin: 25px 0;">
-                    <input type="text" id="credential-input" placeholder="CÃ“DIGO" maxlength="12" spellcheck="false" autocomplete="off" style="width:100%; background:rgba(255,255,255,0.05); border:2px solid rgba(255,255,255,0.1); border-radius:15px; padding:18px; color:white; text-align:center; font-size:1.5rem; font-weight:900;">
-                    <p id="validation-error" style="color:var(--error); font-size:10px; margin-top:10px; font-weight:bold; display:none;">CREDENCIAL INVÃLIDA</p>
-                </div>
-                <button id="btn-start" class="btn btn-primary">ENTRAR AL CAMPO</button>
-            </div>
-        </section>
-
-        <!-- Tutorial -->
-        <section id="screen-tutorial" class="screen">
-            <div class="glass-panel">
-                <h2 style="font-size: 3rem;">PREPÃRATE</h2>
-                <p style="opacity: 0.6; margin: 20px 0;">DESLIZA HACIA ARRIBA PARA TIRAR</p>
-                <div style="height: 100px;"></div>
-                <p style="font-size: 0.8rem; font-weight: 900; color: var(--primary);">TOCA PARA EMPEZAR</p>
-            </div>
-        </section>
-
-        <!-- Pause & Countdown -->
-        <section id="screen-pause" class="screen">
-            <div style="text-align: center;">
-                <h2 style="color: white; font-size: 2rem; margin-bottom: 20px;">REANUDANDO...</h2>
-                <div id="countdown-value" class="countdown-text">3</div>
-            </div>
-        </section>
-
-        <!-- Results -->
-        <section id="screen-results" class="screen">
-            <div class="glass-panel">
-                <h2 style="font-size: 3rem; line-height: 1;">¡FIN DEL JUEGO!</h2>
-                <div style="margin: 20px 0;">
-                    <p style="opacity: 0.5; font-size: 0.8rem; font-weight: 900; text-transform: uppercase;">Tu Puntaje Final</p>
-                    <p id="final-score" style="font-size: 4.5rem; font-family: 'Bebas Neue'; color: var(--primary); line-height: 1;">0</p>
-                </div>
-                <div class="leaderboard-container">
-                    <table class="leaderboard-table"><tbody id="leaderboard-body"></tbody></table>
-                </div>
-                <button id="btn-restart" class="btn btn-secondary">REINTENTAR</button>
-                <button id="btn-share" class="btn btn-share">COMPARTIR LOGRO</button>
-            </div>
-        </section>
+    <div id="ui-layer">
+        <div id="score-text">PUNTOS: 0</div>
+        <div id="message-text"></div>
     </div>
-
+    <div id="game-container"></div>
     <script type="module" src="js/game.js"></script>
 </body>
 </html>
