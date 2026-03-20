@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase B: Integrity Trust Shield
+ * Pure Phaser 3 Implementation - Phase B: Biomechanical Validation
  */
 
 const config = {
@@ -37,7 +37,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Security & Integrity Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Biomechanical Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -47,11 +47,16 @@ function create() {
     this.streak = 0;
     this.isResolving = false;
     this.gameActive = false;
-    
-    // Auth and Session State (Domain 11 & 12)
     this.sessionToken = null;
     this.securitySeal = null;
-    this.sessionSeed = "mocked-seed"; // Will be updated on login
+    this.sessionSeed = "seed-123";
+
+    // Telemetry Buffer (Domain 14)
+    this.lastShotTelemetry = {
+        durationMs: 0,
+        distanceNormalized: 0,
+        curvature: 0
+    };
 
     // UI Cache
     this.screens = {
@@ -78,32 +83,31 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Domain 12: Trust Signature & Integrity ---
     this.generateSignature = async (score) => {
-        // Simple mathematical pact: Hash(Seed + Score + Seal)
         const rawData = `${this.sessionSeed}_${score}_${this.securitySeal}`;
         const encoder = new TextEncoder();
         const data = encoder.encode(rawData);
-        
-        // Native Web Crypto API (No over-engineering)
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.ToString(16).padStart(2, '0')).join('');
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     };
 
-    // --- Domain 33: Persistence & Resilience ---
+    // --- Domain 14: Authenticated Submission with Telemetry ---
     this.submitScore = async () => {
         if (!this.sessionToken || this.score === 0) return;
 
         try {
             const rawToken = sessionStorage.getItem('pg_raw_token');
-            // Create the signature pact before sending (Domain 12)
             const signature = await this.generateSignature(this.score);
 
             const payload = { 
                 credential: rawToken, 
                 score: this.score,
-                signature: signature // The pact
+                signature: signature,
+                // --- Biomechanical Telemetry ---
+                durationMs: this.lastShotTelemetry.durationMs,
+                distanceNormalized: this.lastShotTelemetry.distanceNormalized,
+                curvature: this.lastShotTelemetry.curvature
             };
 
             await fetch('/api/results', {
@@ -114,10 +118,9 @@ function create() {
                 },
                 body: JSON.stringify(payload)
             });
-        } catch (e) { console.error("[API] Resilient submission failed."); }
+        } catch (e) { console.error("[API] Failed to submit with telemetry."); }
     };
 
-    // Interaction & Logic
     const validateToken = async (token) => {
         if (!token) return;
         try {
@@ -129,7 +132,6 @@ function create() {
                 const data = await response.json();
                 this.sessionToken = data.token;
                 this.securitySeal = data.seal;
-                this.sessionSeed = "seed-123"; // In prod, extract from JWT claims if possible
                 sessionStorage.setItem('pg_raw_token', token);
                 this.showScreen('tutorial');
                 this.gameActive = false;
@@ -140,7 +142,6 @@ function create() {
     document.getElementById('btn-start').onclick = () => validateToken(this.screens.input.value.trim());
     document.getElementById('btn-restart').onclick = () => window.location.reload();
 
-    // World & Audio
     this.playSpatialSound = (key, x) => {
         const pan = (x - centerX) / (this.sys.game.config.width / 2);
         this.sound.play(key, { volume: 0.8, pan: Phaser.Math.Clamp(pan, -1, 1) });
@@ -174,16 +175,26 @@ function create() {
 
     this.input.on('pointerup', (pointer) => {
         if (!this.gameActive || this.isResolving) return;
-        if (pointer.time - this.startTime < 50) return;
-        const dX = (pointer.x - this.startX) / this.sys.game.config.width;
-        const dY = (pointer.y - this.startY) / this.sys.game.config.height;
-        if (dY < -0.05) {
-            this.ball.setVelocity(dX * 13000, dY * 13000);
-            this.ball.setAccelerationX(dX * 2500);
+        
+        const duration = pointer.time - this.startTime;
+        if (duration < 50) return;
+
+        const deltaX = (pointer.x - this.startX) / this.sys.game.config.width;
+        const deltaY = (pointer.y - this.startY) / this.sys.game.config.height;
+
+        if (deltaY < -0.05) {
+            // --- Capture Telemetry (Domain 14) ---
+            this.lastShotTelemetry.durationMs = duration;
+            this.lastShotTelemetry.distanceNormalized = Math.sqrt(deltaX**2 + deltaY**2);
+            this.lastShotTelemetry.curvature = deltaX; // Simplified curvature index
+
+            this.ball.setVelocity(deltaX * 13000, deltaY * 13000);
+            this.ball.setAccelerationX(deltaX * 2500);
             this.playSpatialSound('kick', pointer.x);
-            const relX = (centerX + (dX * 1000)) - centerX;
+            
+            const relX = (centerX + (deltaX * 1000)) - centerX;
             const willSave = Math.random() < ((Math.abs(relX) > 200) ? 0.3 : 0.85);
-            let targetX = willSave ? centerX + (dX * 1000) : (dX > 0 ? centerX - 300 : centerX + 300);
+            let targetX = willSave ? centerX + (deltaX * 1000) : (deltaX > 0 ? centerX - 300 : centerX + 300);
             this.tweens.add({ targets: this.goalie, x: Phaser.Math.Clamp(targetX, centerX-400, centerX+400), duration: 350, ease: 'Cubic.out' });
         }
     });
@@ -216,7 +227,7 @@ function update(time, delta) {
             this.time.delayedCall(1500, () => this.resetMatch());
         } else {
             this.playSpatialSound('miss', this.ball.x);
-            this.submitScore();
+            this.submitScore(); // Now includes telemetry
             this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;
                 this.showScreen('results');
