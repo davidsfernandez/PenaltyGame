@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase B: Biomechanical Validation
+ * Pure Phaser 3 Implementation - Phase C: Proximity Ranking UI
  */
 
 const config = {
@@ -37,7 +37,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Biomechanical Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Proximity UI Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -50,15 +50,8 @@ function create() {
     this.sessionToken = null;
     this.securitySeal = null;
     this.sessionSeed = "seed-123";
+    this.lastShotTelemetry = { durationMs: 0, distanceNormalized: 0, curvature: 0 };
 
-    // Telemetry Buffer (Domain 14)
-    this.lastShotTelemetry = {
-        durationMs: 0,
-        distanceNormalized: 0,
-        curvature: 0
-    };
-
-    // UI Cache
     this.screens = {
         welcome: document.getElementById('screen-welcome'),
         results: document.getElementById('screen-results'),
@@ -67,6 +60,7 @@ function create() {
         score: document.getElementById('score-display'),
         streak: document.getElementById('streak-display'),
         finalScore: document.getElementById('final-score'),
+        leaderboard: document.getElementById('leaderboard-body'),
         input: document.getElementById('credential-input'),
         error: document.getElementById('validation-error')
     };
@@ -83,6 +77,44 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
+    // --- Domain 44: Proximity Ranking UI ---
+    this.loadLeaderboard = async () => {
+        if (!this.screens.leaderboard) return;
+        this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.5;">Cargando clasificación...</td></tr>';
+
+        try {
+            const rawToken = sessionStorage.getItem('pg_raw_token');
+            const myAlias = rawToken ? rawToken.substring(0, 3) + "***" : null;
+
+            const response = await fetch('/api/leaderboard');
+            const result = await response.json();
+
+            if (result.success) {
+                this.screens.leaderboard.innerHTML = '';
+                result.data.forEach((entry, index) => {
+                    const row = document.createElement('tr');
+                    
+                    // Highlight the current user (Domain 44)
+                    const isCurrentUser = (entry.alias === myAlias);
+                    if (isCurrentUser) {
+                        row.style.background = 'rgba(0, 242, 96, 0.15)';
+                        row.style.color = '#00f260';
+                    }
+
+                    row.innerHTML = `
+                        <td style="padding:16px; font-weight:900; opacity:${isCurrentUser ? '1' : '0.3'};">#${index + 1}</td>
+                        <td style="padding:16px; font-weight:700;">${entry.alias} ${isCurrentUser ? '(TÚ)' : ''}</td>
+                        <td style="padding:16px; text-align:right; font-weight:900;">${entry.value.toLocaleString()}</td>
+                    `;
+                    this.screens.leaderboard.appendChild(row);
+                });
+            }
+        } catch (error) {
+            console.error("[API] Failed to load leaderboard:", error);
+            this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px;">Error de conexión</td></tr>';
+        }
+    };
+
     this.generateSignature = async (score) => {
         const rawData = `${this.sessionSeed}_${score}_${this.securitySeal}`;
         const encoder = new TextEncoder();
@@ -92,42 +124,20 @@ function create() {
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     };
 
-    // --- Domain 14: Authenticated Submission with Telemetry ---
     this.submitScore = async () => {
         if (!this.sessionToken || this.score === 0) return;
-
         try {
             const rawToken = sessionStorage.getItem('pg_raw_token');
             const signature = await this.generateSignature(this.score);
-
-            const payload = { 
-                credential: rawToken, 
-                score: this.score,
-                signature: signature,
-                // --- Biomechanical Telemetry ---
-                durationMs: this.lastShotTelemetry.durationMs,
-                distanceNormalized: this.lastShotTelemetry.distanceNormalized,
-                curvature: this.lastShotTelemetry.curvature
-            };
-
-            await fetch('/api/results', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'Authorization': `Bearer ${this.sessionToken}` 
-                },
-                body: JSON.stringify(payload)
-            });
-        } catch (e) { console.error("[API] Failed to submit with telemetry."); }
+            const payload = { credential: rawToken, score: this.score, signature: signature, durationMs: this.lastShotTelemetry.durationMs, distanceNormalized: this.lastShotTelemetry.distanceNormalized, curvature: this.lastShotTelemetry.curvature };
+            await fetch('/api/results', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.sessionToken}` }, body: JSON.stringify(payload) });
+        } catch (e) { console.error("[API] Submission failed."); }
     };
 
     const validateToken = async (token) => {
         if (!token) return;
         try {
-            const response = await fetch(`/api/access/validate?token=${encodeURIComponent(token)}`, {
-                method: 'POST',
-                headers: { 'Accept': 'application/json' }
-            });
+            const response = await fetch(`/api/access/validate?token=${encodeURIComponent(token)}`, { method: 'POST', headers: { 'Accept': 'application/json' } });
             if (response.ok) {
                 const data = await response.json();
                 this.sessionToken = data.token;
@@ -175,26 +185,19 @@ function create() {
 
     this.input.on('pointerup', (pointer) => {
         if (!this.gameActive || this.isResolving) return;
-        
-        const duration = pointer.time - this.startTime;
-        if (duration < 50) return;
-
-        const deltaX = (pointer.x - this.startX) / this.sys.game.config.width;
-        const deltaY = (pointer.y - this.startY) / this.sys.game.config.height;
-
-        if (deltaY < -0.05) {
-            // --- Capture Telemetry (Domain 14) ---
-            this.lastShotTelemetry.durationMs = duration;
-            this.lastShotTelemetry.distanceNormalized = Math.sqrt(deltaX**2 + deltaY**2);
-            this.lastShotTelemetry.curvature = deltaX; // Simplified curvature index
-
-            this.ball.setVelocity(deltaX * 13000, deltaY * 13000);
-            this.ball.setAccelerationX(deltaX * 2500);
+        if (pointer.time - this.startTime < 50) return;
+        const dX = (pointer.x - this.startX) / this.sys.game.config.width;
+        const dY = (pointer.y - this.startY) / this.sys.game.config.height;
+        if (dY < -0.05) {
+            this.lastShotTelemetry.durationMs = pointer.time - this.startTime;
+            this.lastShotTelemetry.distanceNormalized = Math.sqrt(dX**2 + dY**2);
+            this.lastShotTelemetry.curvature = dX;
+            this.ball.setVelocity(dX * 13000, dY * 13000);
+            this.ball.setAccelerationX(dX * 2500);
             this.playSpatialSound('kick', pointer.x);
-            
-            const relX = (centerX + (deltaX * 1000)) - centerX;
+            const relX = (centerX + (dX * 1000)) - centerX;
             const willSave = Math.random() < ((Math.abs(relX) > 200) ? 0.3 : 0.85);
-            let targetX = willSave ? centerX + (deltaX * 1000) : (deltaX > 0 ? centerX - 300 : centerX + 300);
+            let targetX = willSave ? centerX + (dX * 1000) : (dX > 0 ? centerX - 300 : centerX + 300);
             this.tweens.add({ targets: this.goalie, x: Phaser.Math.Clamp(targetX, centerX-400, centerX+400), duration: 350, ease: 'Cubic.out' });
         }
     });
@@ -227,9 +230,10 @@ function update(time, delta) {
             this.time.delayedCall(1500, () => this.resetMatch());
         } else {
             this.playSpatialSound('miss', this.ball.x);
-            this.submitScore(); // Now includes telemetry
+            this.submitScore();
             this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;
+                this.loadLeaderboard();
                 this.showScreen('results');
                 this.gameActive = false;
             });
