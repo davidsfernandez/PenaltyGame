@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase A: Dynamic Tutorial Induction
+ * Pure Phaser 3 Implementation - Phase A: Mastery Notations & Tutorial Polish
  */
 
 const config = {
@@ -34,13 +34,12 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Dynamic Tutorial Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Mastery Notations Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
     const topY = 400;
     
-    // Internal State
     this.score = 0;
     this.streak = 0;
     this.isResolving = false;
@@ -72,6 +71,26 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
+    // --- Domain 41 & 43: Mastery Feedback System ---
+    this.showMasteryText = (x, y, message, color = '#00f260') => {
+        const text = this.add.text(x, y, message, {
+            fontFamily: '"Bebas Neue", cursive',
+            fontSize: '120px',
+            color: color,
+            stroke: '#000',
+            strokeThickness: 8
+        }).setOrigin(0.5).setDepth(200);
+
+        this.tweens.add({
+            targets: text,
+            y: y - 150,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Cubic.easeOut',
+            onComplete: () => text.destroy()
+        });
+    };
+
     // --- Interaction ---
     const validateToken = async (token) => {
         if (!token) return;
@@ -84,7 +103,7 @@ function create() {
                 const data = await response.json();
                 this.sessionToken = data.token;
                 sessionStorage.setItem('pg_raw_token', token);
-                this.showScreen('tutorial'); // Go to tutorial screen
+                this.showScreen('tutorial');
                 this.gameActive = false;
             } else {
                 this.screens.error.classList.remove('hidden');
@@ -96,27 +115,23 @@ function create() {
     document.getElementById('btn-restart').onclick = () => window.location.reload();
 
     // World
-    this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch');
-    this.pitch.setAlpha(0.8);
+    this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch').setAlpha(0.8);
     this.goalie = this.physics.add.sprite(centerX, topY, 'goalie').setScale(1.5).setImmovable(true);
     this.ball = this.physics.add.sprite(centerX, bottomY, 'ball').setScale(1.2).setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
 
-    // --- Domain 42: Dynamic Tutorial Elements ---
-    this.tutorialHand = this.add.sprite(centerX, bottomY, 'hand')
-        .setScale(1.5)
-        .setAlpha(0)
-        .setDepth(100);
+    // --- Domain 42: Tutorial Polish ---
+    this.tutorialHand = this.add.sprite(centerX, bottomY, 'hand').setScale(1.5).setAlpha(0).setDepth(100);
 
     this.startTutorialAnimation = () => {
         this.tutorialHand.setAlpha(1);
         this.tweens.add({
             targets: this.tutorialHand,
-            y: bottomY - 400,
+            y: bottomY - 450,
             alpha: { from: 1, to: 0 },
-            duration: 1500,
+            duration: 2000, // Adjusted: Slower for better pedagogical rhythm
             repeat: -1,
-            ease: 'Cubic.easeOut',
+            ease: 'Sine.easeInOut',
             onRepeat: () => { this.tutorialHand.y = bottomY; this.tutorialHand.alpha = 1; }
         });
     };
@@ -129,18 +144,11 @@ function create() {
         this.gameActive = true;
     };
 
-    // Auto-recovery
     const storedToken = sessionStorage.getItem('pg_raw_token');
     if (storedToken) validateToken(storedToken);
 
-    // Input Logic
     this.input.on('pointerdown', (pointer) => {
-        // Destroy tutorial on first touch (Domain 42)
-        if (this.tutorialHand && this.tutorialHand.active) {
-            this.stopTutorial();
-            return;
-        }
-
+        if (this.tutorialHand && this.tutorialHand.active) { this.stopTutorial(); return; }
         if (!this.gameActive || this.isResolving) return;
         this.startX = pointer.x; this.startY = pointer.y; this.startTime = pointer.time;
     });
@@ -151,13 +159,11 @@ function create() {
         const dX = (pointer.x - this.startX) / this.sys.game.config.width;
         const dY = (pointer.y - this.startY) / this.sys.game.config.height;
         if (dY < -0.05) {
-            this.ball.setVelocity(dX * 12500, dY * 12500);
+            this.ball.setVelocity(dX * 13000, dY * 13000);
             this.ball.setAccelerationX(dX * 2500);
-            
-            // Goalie AI Decision (Domain 22)
             const relX = (centerX + (dX * 1000)) - centerX;
-            const willSave = Math.random() < ((Math.abs(relX) > 200) ? 0.3 : 0.8);
-            const targetX = willSave ? centerX + (dX * 1000) : (dX > 0 ? centerX - 200 : centerX + 200);
+            const willSave = Math.random() < ((Math.abs(relX) > 200) ? 0.3 : 0.85);
+            let targetX = willSave ? centerX + (dX * 1000) : (dX > 0 ? centerX - 300 : centerX + 300);
             this.tweens.add({ targets: this.goalie, x: Phaser.Math.Clamp(targetX, centerX-400, centerX+400), duration: 350, ease: 'Cubic.out' });
         }
     });
@@ -176,22 +182,42 @@ function update(time, delta) {
 
     if (!this.gameActive) return;
 
-    // Depth Scaling
     if (this.ball.active && this.ball.y < this.sys.game.config.height - 300) {
         const progress = Phaser.Math.Clamp(((this.sys.game.config.height - 250) - this.ball.y) / 1300, 0, 1);
         this.ball.setScale(1.2 - (progress * 0.6));
     }
 
-    // Resolution
     if (!this.isResolving && this.ball.y < 250) {
         this.isResolving = true;
         this.ball.setVelocity(0, 0).setAccelerationX(0);
-        if (Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300) {
+        
+        const relX = this.ball.x - (this.sys.game.config.width / 2);
+        const isGoal = Math.abs(relX) < 300;
+
+        if (isGoal) {
             this.cameras.main.flash(200, 0, 242, 96, 0.3);
-            this.streak++; this.score += (100 * this.streak);
+            this.streak++;
+            
+            // --- Prompt 2: Mastery Notation Trigger ---
+            let msg = "¡GOL!";
+            let color = "#00f260";
+            let points = 100;
+
+            if (Math.abs(relX) > 200) {
+                msg = "¡GOLAZO!";
+                color = "#00d2ff";
+                points = 500;
+            } else if (this.streak >= 3) {
+                msg = "¡IMPARABLE!";
+                color = "#ffcc00";
+            }
+
+            this.showMasteryText(this.ball.x, this.ball.y, msg, color);
+            this.score += (points * this.streak);
             this.updateUI();
             this.time.delayedCall(1500, () => this.resetMatch());
         } else {
+            this.showMasteryText(this.ball.x, this.ball.y, "¡POR POCO!", "#ff4b2b");
             this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;
                 this.showScreen('results');
