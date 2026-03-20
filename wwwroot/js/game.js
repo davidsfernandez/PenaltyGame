@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase A: Mastery Notations & Tutorial Polish
+ * Pure Phaser 3 Implementation - Phase A: Spatial Audio Integration
  */
 
 const config = {
@@ -31,10 +31,15 @@ function preload() {
     this.load.image('goalie', 'assets/sprites/goalie_idle.png');
     this.load.image('pitch', 'assets/sprites/pitch.png');
     this.load.image('hand', 'assets/sprites/hand_icon.png');
+
+    // --- Phase A: Spatial Audio Assets ---
+    this.load.audio('kick', 'https://labs.phaser.io/assets/audio/SoundEffects/squit.mp3');
+    this.load.audio('goal', 'https://labs.phaser.io/assets/audio/SoundEffects/success.mp3');
+    this.load.audio('miss', 'https://labs.phaser.io/assets/audio/SoundEffects/p-achoo.mp3');
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Mastery Notations Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Spatial Audio Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -71,7 +76,13 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Domain 41 & 43: Mastery Feedback System ---
+    // --- Domain 35: Spatial Audio Implementation ---
+    this.playSpatialSound = (key, x, volume = 1.0) => {
+        // Calculate pan: -1 (Left) to 1 (Right)
+        const pan = (x - centerX) / (this.sys.game.config.width / 2);
+        this.sound.play(key, { volume: volume, pan: Phaser.Math.Clamp(pan, -1, 1) });
+    };
+
     this.showMasteryText = (x, y, message, color = '#00f260') => {
         const text = this.add.text(x, y, message, {
             fontFamily: '"Bebas Neue", cursive',
@@ -91,7 +102,7 @@ function create() {
         });
     };
 
-    // --- Interaction ---
+    // --- Interaction & Auth ---
     const validateToken = async (token) => {
         if (!token) return;
         try {
@@ -120,7 +131,6 @@ function create() {
     this.ball = this.physics.add.sprite(centerX, bottomY, 'ball').setScale(1.2).setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
 
-    // --- Domain 42: Tutorial Polish ---
     this.tutorialHand = this.add.sprite(centerX, bottomY, 'hand').setScale(1.5).setAlpha(0).setDepth(100);
 
     this.startTutorialAnimation = () => {
@@ -129,7 +139,7 @@ function create() {
             targets: this.tutorialHand,
             y: bottomY - 450,
             alpha: { from: 1, to: 0 },
-            duration: 2000, // Adjusted: Slower for better pedagogical rhythm
+            duration: 2000,
             repeat: -1,
             ease: 'Sine.easeInOut',
             onRepeat: () => { this.tutorialHand.y = bottomY; this.tutorialHand.alpha = 1; }
@@ -161,11 +171,29 @@ function create() {
         if (dY < -0.05) {
             this.ball.setVelocity(dX * 13000, dY * 13000);
             this.ball.setAccelerationX(dX * 2500);
+            
+            // Spatial Kick Sound
+            this.playSpatialSound('kick', pointer.x, 0.6);
+
             const relX = (centerX + (dX * 1000)) - centerX;
             const willSave = Math.random() < ((Math.abs(relX) > 200) ? 0.3 : 0.85);
             let targetX = willSave ? centerX + (dX * 1000) : (dX > 0 ? centerX - 300 : centerX + 300);
             this.tweens.add({ targets: this.goalie, x: Phaser.Math.Clamp(targetX, centerX-400, centerX+400), duration: 350, ease: 'Cubic.out' });
         }
+    });
+
+    this.physics.add.overlap(this.ball, this.goalie, () => {
+        if (this.isResolving) return;
+        this.isResolving = true;
+        this.ball.setVelocity(0, 0).setAccelerationX(0);
+        
+        // Spatial Save Sound
+        this.playSpatialSound('miss', this.ball.x, 0.8);
+        
+        this.streak = 0;
+        this.updateUI();
+        this.cameras.main.shake(200, 0.01);
+        this.time.delayedCall(1500, () => this.resetMatch());
     });
 
     this.resetMatch = () => {
@@ -195,21 +223,20 @@ function update(time, delta) {
         const isGoal = Math.abs(relX) < 300;
 
         if (isGoal) {
+            // Spatial Goal Sound
+            this.playSpatialSound('goal', this.ball.x, 1.0);
+            
             this.cameras.main.flash(200, 0, 242, 96, 0.3);
             this.streak++;
             
-            // --- Prompt 2: Mastery Notation Trigger ---
             let msg = "¡GOL!";
             let color = "#00f260";
             let points = 100;
 
             if (Math.abs(relX) > 200) {
-                msg = "¡GOLAZO!";
-                color = "#00d2ff";
-                points = 500;
+                msg = "¡GOLAZO!"; color = "#00d2ff"; points = 500;
             } else if (this.streak >= 3) {
-                msg = "¡IMPARABLE!";
-                color = "#ffcc00";
+                msg = "¡IMPARABLE!"; color = "#ffcc00";
             }
 
             this.showMasteryText(this.ball.x, this.ball.y, msg, color);
@@ -217,7 +244,8 @@ function update(time, delta) {
             this.updateUI();
             this.time.delayedCall(1500, () => this.resetMatch());
         } else {
-            this.showMasteryText(this.ball.x, this.ball.y, "¡POR POCO!", "#ff4b2b");
+            this.playSpatialSound('miss', this.ball.x, 0.5);
+            this.showMasteryText(this.ball.x, this.ball.y, "¡POR FUERA!", "#ff4b2b");
             this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;
                 this.showScreen('results');
