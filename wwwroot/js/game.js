@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 5: Offline Resilience & Vault
+ * Pure Phaser 3 Implementation - Phase 5: Dynamic FPS Scaling (FPS Sentinel)
  */
 
 const config = {
@@ -33,7 +33,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Resilience & Vault Phase.");
+    console.log("[Engine] Phaser 3 Initialized. FPS Sentinel Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -44,6 +44,14 @@ function create() {
     this.isResolving = false;
     this.gameActive = false;
     this.sessionToken = null;
+
+    // --- Domain 36: Performance Sentinel State ---
+    this.performance = {
+        fpsThreshold: 45,
+        lowPerfMode: false,
+        frameHistory: [],
+        checkInterval: 60 // frames
+    };
 
     // UI Cache
     this.screens = {
@@ -69,61 +77,54 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
+    // --- Particle Systems (Subject to Sentinel) ---
+    this.trailEmitter = this.add.particles(0, 0, 'ball', {
+        scale: { start: 0.4, end: 0 },
+        alpha: { start: 0.5, end: 0 },
+        lifespan: 400,
+        blendMode: 'ADD',
+        frequency: 20,
+        emitting: false
+    });
+
+    this.goalEmitter = this.add.particles(0, 0, 'ball', {
+        speed: { min: 200, max: 600 },
+        scale: { start: 0.5, end: 0 },
+        alpha: { start: 1, end: 0 },
+        lifespan: 800,
+        gravityY: 300,
+        blendMode: 'ADD',
+        emitting: false
+    });
+
     // --- Domain 33: Local Vault Logic ---
     this.syncOfflineScores = async () => {
         const pending = localStorage.getItem('pg_pending_score');
         if (!pending || !this.sessionToken) return;
-
-        console.log("[Resilience] Found unsynced score in vault. Retrying...");
         const payload = JSON.parse(pending);
-        
         try {
             const response = await fetch('/api/results', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'Authorization': `Bearer ${this.sessionToken}` 
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.sessionToken}` },
                 body: JSON.stringify(payload)
             });
-
-            if (response.ok) {
-                console.log("[Resilience] Vault synchronized successfully.");
-                localStorage.removeItem('pg_pending_score');
-            }
-        } catch (e) {
-            console.warn("[Resilience] Synchronization failed. Keeping data in vault.");
-        }
+            if (response.ok) localStorage.removeItem('pg_pending_score');
+        } catch (e) { console.warn("[Resilience] Sync failed."); }
     };
 
     this.submitScore = async () => {
         if (!this.sessionToken || this.score === 0) return;
-
         const rawToken = sessionStorage.getItem('pg_raw_token');
         const payload = { credential: rawToken, score: this.score };
-
-        // 1. Secure in vault first (Domain 33)
         localStorage.setItem('pg_pending_score', JSON.stringify(payload));
-
-        console.log("[API] Attempting score transmission...");
         try {
             const response = await fetch('/api/results', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'Authorization': `Bearer ${this.sessionToken}` 
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.sessionToken}` },
                 body: JSON.stringify(payload)
             });
-
-            if (response.ok) {
-                // 2. If server confirms, clear vault
-                localStorage.removeItem('pg_pending_score');
-                console.log("[API] Score synchronized.");
-            }
-        } catch (error) {
-            console.error("[Resilience] Network failure. Score remains secured in Local Vault.");
-        }
+            if (response.ok) localStorage.removeItem('pg_pending_score');
+        } catch (error) { console.error("[Resilience] Saved to Vault."); }
     };
 
     this.loadLeaderboard = async () => {
@@ -157,8 +158,6 @@ function create() {
                 this.showScreen('none');
                 this.screens.hud.classList.remove('hidden');
                 this.gameActive = true;
-                
-                // Trigger sync sentinel
                 this.syncOfflineScores();
             } else {
                 this.screens.error.classList.remove('hidden');
@@ -180,12 +179,12 @@ function create() {
     this.ball = this.physics.add.sprite(centerX, bottomY, 'ball').setScale(1.2);
     this.ball.setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
+    this.trailEmitter.startFollow(this.ball);
 
     this.moveGoalie = (predictedX) => {
         const relX = predictedX - centerX;
         let zoneModifier = (Math.abs(relX) > 200) ? 0.3 : (Math.abs(relX) < 100 ? 0.9 : 0.5);
-        const ddaFactor = Math.min(0.2, this.streak * 0.05);
-        const willSave = Math.random() < (zoneModifier + ddaFactor);
+        const willSave = Math.random() < (zoneModifier + Math.min(0.2, this.streak * 0.05));
         let targetX = willSave ? predictedX : (predictedX > centerX ? predictedX - 300 : predictedX + 300);
         this.tweens.add({ targets: this.goalie, x: Phaser.Math.Clamp(targetX, centerX - 400, centerX + 400), duration: 350, ease: 'Cubic.easeOut' });
     };
@@ -194,6 +193,7 @@ function create() {
         if (this.isResolving) return;
         this.isResolving = true;
         this.ball.setVelocity(0, 0).setAccelerationX(0);
+        this.trailEmitter.stop();
         this.cameras.main.shake(200, 0.01);
         this.submitScore();
         this.time.delayedCall(1500, () => {
@@ -218,6 +218,11 @@ function create() {
             this.ball.setVelocity(dX * 12500, dY * 12500);
             this.ball.setAccelerationX(dX * 2500);
             this.moveGoalie(centerX + (dX * 1000));
+            
+            // Only emit trail if not in Low Performance mode (Domain 36)
+            if (!this.performance.lowPerfMode) {
+                this.trailEmitter.start();
+            }
         }
     });
 
@@ -225,19 +230,39 @@ function create() {
         this.ball.setPosition(centerX, bottomY).setVelocity(0, 0).setAccelerationX(0).setScale(1.2);
         this.goalie.setPosition(centerX, topY);
         this.isResolving = false;
+        this.trailEmitter.stop();
     };
 }
 
-function update() {
+function update(time, delta) {
     if (!this.gameActive) return;
+
+    // --- Domain 36: FPS Sentinel Monitoring ---
+    const currentFps = 1000 / delta;
+    this.performance.frameHistory.push(currentFps);
+    if (this.performance.frameHistory.length > this.performance.checkInterval) {
+        this.performance.frameHistory.shift();
+        const avgFps = this.performance.frameHistory.reduce((a, b) => a + b) / this.performance.checkInterval;
+        
+        if (avgFps < this.performance.fpsThreshold && !this.performance.lowPerfMode) {
+            console.warn(`[Sentinel] Performance drop detected (${Math.round(avgFps)} FPS). Activating Eco-Mode.`);
+            this.performance.lowPerfMode = true;
+            this.trailEmitter.stop(); // Aesthetic Pruning (Tier 1)
+        }
+    }
+
     if (this.ball.active && this.ball.y < this.sys.game.config.height - 300) {
         const progress = Phaser.Math.Clamp(((this.sys.game.config.height - 250) - this.ball.y) / 1300, 0, 1);
         this.ball.setScale(1.2 - (progress * 0.6));
     }
+
     if (!this.isResolving && this.ball.y < 250) {
         this.isResolving = true;
         this.ball.setVelocity(0, 0).setAccelerationX(0);
+        this.trailEmitter.stop();
+
         if (Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300) {
+            this.goalEmitter.emitParticleAt(this.ball.x, this.ball.y, 20);
             this.cameras.main.flash(200, 0, 242, 96, 0.3);
             this.streak++;
             this.score += (100 * this.streak);
