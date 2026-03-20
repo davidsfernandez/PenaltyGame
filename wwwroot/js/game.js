@@ -15,9 +15,11 @@ class PreloadScene extends Phaser.Scene {
         this.load.image('goalie', 'assets/sprites/goalie_idle.png');
         this.load.image('pitch', 'assets/sprites/pitch.png');
         this.load.image('hand', 'assets/sprites/hand_icon.png');
-        this.load.audio('kick', 'assets/audio/kick.mp3');
-        this.load.audio('goal', 'assets/audio/goal.mp3');
-        this.load.audio('miss', 'assets/audio/miss.mp3');
+        /* Audio disabled for CORS bypass
+        this.load.audio('kick', 'https://labs.phaser.io/assets/audio/SoundEffects/squit.mp3');
+        this.load.audio('goal', 'https://labs.phaser.io/assets/audio/SoundEffects/success.mp3');
+        this.load.audio('miss', 'https://labs.phaser.io/assets/audio/SoundEffects/p-achoo.mp3');
+        */
     }
     create() { this.scene.start('MenuScene'); }
 }
@@ -63,8 +65,20 @@ class MenuScene extends Phaser.Scene {
 class TutorialScene extends Phaser.Scene {
     constructor() { super('TutorialScene'); }
     create() {
-        document.getElementById('screen-tutorial').classList.add('active');
-        this.input.once('pointerdown', () => this.scene.start('GameScene'));
+        const tutorialScreen = document.getElementById('screen-tutorial');
+        tutorialScreen.classList.add('active');
+        
+        const startGame = () => {
+            tutorialScreen.removeEventListener('pointerdown', startGame);
+            tutorialScreen.removeEventListener('click', startGame);
+            this.scene.start('GameScene');
+        };
+        
+        tutorialScreen.addEventListener('pointerdown', startGame);
+        tutorialScreen.addEventListener('click', startGame);
+        
+        // Fallback to Phaser input
+        this.input.once('pointerdown', startGame);
     }
 }
 
