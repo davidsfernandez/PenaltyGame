@@ -3,113 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Penalty Challenge | Phaser 3 Edition</title>
     
-    <title>Penalty Challenge | Production Engine</title>
-    <meta name="description" content="Demuestra tu maestría en el campo con el Desafío de Penales.">
+    <!-- Phaser 3 Engine -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     
-    <link rel="stylesheet" href="css/style.css">
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-container {
+            width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+        }
+        /* UI Layer for later prompts */
+        #ui-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+    </style>
 </head>
 <body>
-
-    <main id="app-root">
-        
-        <!-- Layer 1: Graphics Rendering Canvas -->
-        <section id="render-layer">
-            <canvas id="game-canvas"></canvas>
-        </section>
-
-        <!-- Layer 2: UI Overlay -->
-        <section id="ui-layer">
-            
-            <div id="ui-content-root">
-                
-                <!-- Welcome Screen -->
-                <div id="landing-screen" class="glass-panel active-screen">
-                    <div class="header-text">
-                        <h1 class="title">PENALTY<br><span class="highlight">CHALLENGE</span></h1>
-                        <p class="subtitle">Ingresa tu credencial para continuar</p>
-                    </div>
-
-                    <form id="auth-form">
-                        <input type="text" id="credential-input" placeholder="CÓDIGO" maxlength="12" spellcheck="false" autocomplete="off">
-                        <button type="submit" id="btn-submit-auth" class="btn-primary">
-                            ENTRAR AL CAMPO
-                        </button>
-                        <p id="validation-error" class="error-text hidden">Credencial inválida o vacía</p>
-                    </form>
-                </div>
-
-                <!-- HUD Layer -->
-                <header class="hud hidden" id="game-hud">
-                    <div class="hud-item">
-                        <span class="label">PUNTUACIÓN</span>
-                        <span id="score-value" class="value">0</span>
-                    </div>
-                    <div class="hud-item">
-                        <span class="label">RACHA</span>
-                        <span id="streak-value" class="value">x0</span>
-                    </div>
-                </header>
-
-                <!-- Tutorial Layer -->
-                <section class="screen hidden" id="screen-tutorial">
-                    <div class="glass-panel tutorial-box">
-                        <div class="ghost-hand"></div>
-                        <h2>¡PREPÁRATE!</h2>
-                        <p>Desliza el dedo hacia el arco para patear.</p>
-                        <p class="blink-text">TOCA PARA EMPEZAR</p>
-                    </div>
-                </section>
-
-                <!-- Results Screen -->
-                <div id="results-screen" class="glass-panel results-box hidden">
-                    <div class="header-text">
-                        <h2 class="title-small">RESULTADOS DE LA SESIÓN</h2>
-                    </div>
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <p class="label">Puntaje Final</p>
-                            <p id="final-score-value" class="value highlight">0</p>
-                        </div>
-                        <div class="stat-card">
-                            <p class="label">Estado</p>
-                            <p class="value info">COMPLETADO</p>
-                        </div>
-                    </div>
-
-                    <div class="leaderboard-container">
-                        <h3 class="label text-left mb-2">Ranking Global de Maestría</h3>
-                        <div class="table-wrapper">
-                            <table class="leaderboard-table">
-                                <thead>
-                                    <tr>
-                                        <th>Rango</th>
-                                        <th>Participante</th>
-                                        <th class="text-right">Puntos</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="leaderboard-body">
-                                    <!-- Dynamic rows -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="actions-grid">
-                        <button id="btn-restart" class="btn-secondary">REINTENTAR</button>
-                        <button id="btn-share" class="btn-info">COMPARTIR</button>
-                    </div>
-                </div>
-
-            </div>
-            
-            <div id="message-area" class="message-floating hidden"></div>
-
-        </section>
-
-    </main>
+    <div id="game-container"></div>
+    <div id="ui-overlay"></div>
 
     <script type="module" src="js/game.js"></script>
 </body>
