@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 2: AI Goalie Refinement (DDA)
+ * Pure Phaser 3 Implementation - Phase 3: Secure Handshake Auth
  */
 
 const config = {
@@ -33,7 +33,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. AI Refinement Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Auth Handshake Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -43,15 +43,21 @@ function create() {
     this.streak = 0;
     this.isResolving = false;
     this.gameActive = false;
+    
+    // Auth and Session State
+    this.sessionToken = null;
+    this.securitySeal = null;
 
-    // UI Elements Mapping
+    // UI Cache
     this.screens = {
         welcome: document.getElementById('screen-welcome'),
         results: document.getElementById('screen-results'),
         hud: document.getElementById('game-hud'),
         score: document.getElementById('score-display'),
         streak: document.getElementById('streak-display'),
-        finalScore: document.getElementById('final-score')
+        finalScore: document.getElementById('final-score'),
+        input: document.getElementById('credential-input'),
+        error: document.getElementById('validation-error')
     };
 
     this.showScreen = (screenKey) => {
@@ -65,19 +71,50 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // Events
-    document.getElementById('btn-start').onclick = () => {
-        this.showScreen('none');
-        this.screens.hud.classList.remove('hidden');
-        this.gameActive = true;
+    // --- Phase 3: Real Auth Handshake ---
+    const handleAuthSubmit = async () => {
+        const token = this.screens.input.value.trim();
+        if (!token) return;
+
+        try {
+            console.log("[Auth] Contacting Server Boundary...");
+            const response = await fetch(`/api/access/validate?token=${encodeURIComponent(token)}`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Securely store artifacts (Domain 11)
+                this.sessionToken = data.token;
+                this.securitySeal = data.seal;
+                
+                console.log("[Auth] Handshake successful. Session established.");
+                
+                this.showScreen('none');
+                this.screens.hud.classList.remove('hidden');
+                this.gameActive = true;
+                
+                // Initialize audio on first user gesture (Browser policy)
+                if (this.game.sound.context.state === 'suspended') {
+                    this.game.sound.context.resume();
+                }
+            } else {
+                this.screens.error.classList.remove('hidden');
+                console.warn("[Auth] Invalid credential provided.");
+            }
+        } catch (error) {
+            console.error("[Auth] Communication failure:", error);
+            this.screens.error.innerText = "Error de conexión con el estadio";
+            this.screens.error.classList.remove('hidden');
+        }
     };
 
+    document.getElementById('btn-start').onclick = handleAuthSubmit;
+
     document.getElementById('btn-restart').onclick = () => {
-        this.score = 0; this.streak = 0;
-        this.updateUI();
-        this.resetMatch();
-        this.showScreen('none');
-        this.gameActive = true;
+        window.location.reload(); // Hard reset for session integrity (Domain 32)
     };
 
     // World Objects
@@ -92,32 +129,13 @@ function create() {
     this.ball.setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
 
-    // --- Domain 22: AI Decision Tree ---
-    this.aiDecision = { willSave: false, targetX: centerX };
-
-    this.moveGoalie = (predictedX, predictedY) => {
-        // 1. Zonal Probability Matrix (Domain 22)
-        // Horizontal: Left (-350 to -150), Center (-150 to 150), Right (150 to 350)
+    this.moveGoalie = (predictedX) => {
         const relX = predictedX - centerX;
-        let zoneModifier = 0.5; // Default
-
-        if (Math.abs(relX) > 200) zoneModifier = 0.3; // Corners are harder
-        else if (Math.abs(relX) < 100) zoneModifier = 0.9; // Center is easier
-
-        // 2. Dynamic Difficulty Adjustment (Domain 25)
-        // High streak increases goalie skill
+        let zoneModifier = (Math.abs(relX) > 200) ? 0.3 : (Math.abs(relX) < 100 ? 0.9 : 0.5);
         const ddaFactor = Math.min(0.2, this.streak * 0.05);
-        const saveProbability = zoneModifier + ddaFactor;
-
-        // 3. The Decision
-        this.aiDecision.willSave = Math.random() < saveProbability;
         
-        // 4. Execution (Tween)
-        // If save: move to the ball. If fail: move away or stay late.
-        let targetX = predictedX;
-        if (!this.aiDecision.willSave) {
-            targetX = (predictedX > centerX) ? predictedX - 300 : predictedX + 300;
-        }
+        const willSave = Math.random() < (zoneModifier + ddaFactor);
+        let targetX = willSave ? predictedX : (predictedX > centerX ? predictedX - 300 : predictedX + 300);
 
         this.tweens.add({
             targets: this.goalie,
@@ -131,11 +149,9 @@ function create() {
         if (this.isResolving) return;
         this.isResolving = true;
         this.ball.setVelocity(0, 0).setAccelerationX(0);
-        
         this.streak = 0;
         this.updateUI();
         this.cameras.main.shake(200, 0.01);
-        console.log("[AI] Save successful.");
         this.time.delayedCall(1500, () => this.resetMatch());
     });
 
@@ -146,8 +162,7 @@ function create() {
 
     this.input.on('pointerup', (pointer) => {
         if (!this.gameActive || this.isResolving) return;
-        const duration = pointer.time - this.startTime;
-        if (duration < 50) return;
+        if (pointer.time - this.startTime < 50) return;
 
         const deltaX = (pointer.x - this.startX) / this.sys.game.config.width;
         const deltaY = (pointer.y - this.startY) / this.sys.game.config.height;
@@ -156,11 +171,7 @@ function create() {
             const power = 12500;
             this.ball.setVelocity(deltaX * power, deltaY * power);
             this.ball.setAccelerationX(deltaX * 2500);
-
-            // Predict ball landing position roughly (Domain 22)
-            // Logic: linear projection based on velocity
-            const predictedX = centerX + (deltaX * 1000); 
-            this.moveGoalie(predictedX, topY);
+            this.moveGoalie(centerX + (deltaX * 1000));
         }
     });
 
@@ -179,21 +190,16 @@ function update() {
         this.ball.setScale(1.2 - (progress * 0.6));
     }
 
-    // Goal Detection (Domain 23)
     if (!this.isResolving && this.ball.y < 250) {
         this.isResolving = true;
         this.ball.setVelocity(0, 0).setAccelerationX(0);
         
-        const isWithinGoal = Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300;
-
-        if (isWithinGoal) {
+        if (Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300) {
             this.cameras.main.flash(200, 0, 242, 96, 0.3);
             this.streak++;
             this.score += (100 * this.streak);
-            console.log("[Logic] Goal scored.");
         } else {
             this.streak = 0;
-            console.log("[Logic] Missed target.");
         }
         
         this.updateUI();
