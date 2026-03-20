@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase 1: Visual Identity, Typography & UI Polish
+ * Pure Phaser 3 Implementation - Phase 2: Physics Normalization
  */
 
 const config = {
@@ -15,7 +15,10 @@ const config = {
     },
     physics: {
         default: 'arcade',
-        arcade: { gravity: { y: 0 }, debug: false }
+        arcade: { 
+            gravity: { y: 0 }, 
+            debug: false 
+        }
     },
     scene: {
         preload: preload,
@@ -33,18 +36,18 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. UI Polish Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Physics Normalization Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
     const topY = 400;
     
-    // --- State & UI Cache ---
     this.score = 0;
     this.streak = 0;
     this.isResolving = false;
     this.gameActive = false;
 
+    // UI Cache
     this.screens = {
         welcome: document.getElementById('screen-welcome'),
         results: document.getElementById('screen-results'),
@@ -54,16 +57,10 @@ function create() {
         finalScore: document.getElementById('final-score')
     };
 
-    // --- UI Methods ---
     this.showScreen = (screenKey) => {
-        // Hide all major screens
         this.screens.welcome.classList.remove('active');
         this.screens.results.classList.remove('active');
-        
-        // Show target
-        if (this.screens[screenKey]) {
-            this.screens[screenKey].classList.add('active');
-        }
+        if (this.screens[screenKey]) this.screens[screenKey].classList.add('active');
     };
 
     this.updateUI = () => {
@@ -71,34 +68,34 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Interaction Bindings ---
+    // Interaction Bindings
     document.getElementById('btn-start').onclick = () => {
-        this.showScreen('none'); // Hide all screens
+        this.showScreen('none');
         this.screens.hud.classList.remove('hidden');
         this.gameActive = true;
     };
 
     document.getElementById('btn-restart').onclick = () => {
-        this.score = 0;
-        this.streak = 0;
+        this.score = 0; this.streak = 0;
         this.updateUI();
         this.resetMatch();
         this.showScreen('none');
         this.gameActive = true;
     };
 
-    // --- World Objects ---
+    // World Objects
     this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch');
     this.pitch.setAlpha(0.8);
 
     this.goalie = this.physics.add.sprite(centerX, topY, 'goalie').setScale(1.5);
     this.goalie.setImmovable(true);
+    this.goalie.body.setSize(120, 180);
 
     this.ball = this.physics.add.sprite(centerX, bottomY, 'ball').setScale(1.2);
-    this.ball.setCollideWorldBounds(true).setBounce(0.5).setDrag(150);
+    this.ball.setCollideWorldBounds(true).setBounce(0.4).setDrag(180);
     this.ball.body.setCircle(32);
 
-    // --- Mechanics ---
+    // AI & Physics Logic
     this.moveGoalie = () => {
         const targetX = Phaser.Math.Between(centerX - 350, centerX + 350);
         this.tweens.add({ targets: this.goalie, x: targetX, duration: 400, ease: 'Cubic.easeOut' });
@@ -108,14 +105,10 @@ function create() {
         if (this.isResolving) return;
         this.isResolving = true;
         this.ball.setVelocity(0, 0);
-        
-        // Fail transition (Domain 45)
+        this.streak = 0;
+        this.updateUI();
         this.cameras.main.shake(200, 0.01);
-        this.time.delayedCall(1500, () => {
-            this.screens.finalScore.innerText = this.score;
-            this.showScreen('results');
-            this.gameActive = false;
-        });
+        this.time.delayedCall(1500, () => this.resetMatch());
     });
 
     this.input.on('pointerdown', (pointer) => {
@@ -127,12 +120,27 @@ function create() {
 
     this.input.on('pointerup', (pointer) => {
         if (!this.gameActive || this.isResolving) return;
+        
         const duration = pointer.time - this.startTime;
-        const deltaY = pointer.y - this.startY;
+        if (duration < 50) return; // Anti-click (Domain 14)
 
-        if (duration < 1000 && deltaY < -80) {
-            this.ball.setVelocity((pointer.x - this.startX) * 6, deltaY * 6);
+        // --- Domain 27: Interaction Normalization ---
+        // Calculate deltas relative to viewport size (UAS units)
+        const normalizedDeltaX = (pointer.x - this.startX) / this.sys.game.config.width;
+        const normalizedDeltaY = (pointer.y - this.startY) / this.sys.game.config.height;
+
+        // Constraint: Only upward swipes (Domain 28)
+        if (normalizedDeltaY < -0.05) {
+            // Apply force based on normalized units to ensure cross-device parity
+            // Multiplier represents "Pixels per Second" in the 1080p logical space
+            const powerFactor = 12000; 
+            
+            const velX = normalizedDeltaX * powerFactor;
+            const velY = normalizedDeltaY * powerFactor;
+
+            this.ball.setVelocity(velX, velY);
             this.moveGoalie();
+            console.log(`[Physics] Normalized Shot: ΔX=${normalizedDeltaX.toFixed(3)}, ΔY=${normalizedDeltaY.toFixed(3)}`);
         }
     });
 
