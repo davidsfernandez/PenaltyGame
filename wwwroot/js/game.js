@@ -1,6 +1,6 @@
 /**
  * Penalty Challenge - Main Game Orchestrator
- * Pure Phaser 3 Implementation - Phase C: Proximity Ranking UI
+ * Pure Phaser 3 Implementation - Phase C: Social Sharing & UI Refinement
  */
 
 const config = {
@@ -37,7 +37,7 @@ function preload() {
 }
 
 function create() {
-    console.log("[Engine] Phaser 3 Initialized. Proximity UI Phase.");
+    console.log("[Engine] Phaser 3 Initialized. Social Integration Phase.");
 
     const centerX = this.sys.game.config.width / 2;
     const bottomY = this.sys.game.config.height - 250;
@@ -77,14 +77,30 @@ function create() {
         this.screens.streak.innerText = `x${this.streak}`;
     };
 
-    // --- Domain 44: Proximity Ranking UI ---
+    // --- Domain 48: Social Sharing Logic ---
+    this.shareResult = async () => {
+        const text = `¡Acabo de lograr ${this.score.toLocaleString()} puntos en Penalty Challenge! ¿Podrás superar mi racha de x${this.streak}? Juega aquí:`;
+        const url = window.location.href;
+
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'Penalty Challenge', text: text, url: url });
+                console.log("[Social] Share successful.");
+            } catch (e) { console.log("[Social] Share cancelled."); }
+        } else {
+            // Fallback: Copy to clipboard
+            navigator.clipboard.writeText(`${text} ${url}`);
+            alert("¡Mensaje copiado al portapapeles! Compártelo con tus amigos.");
+        }
+    };
+
     this.loadLeaderboard = async () => {
         if (!this.screens.leaderboard) return;
         this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.5;">Cargando clasificación...</td></tr>';
 
         try {
             const rawToken = sessionStorage.getItem('pg_raw_token');
-            const myAlias = rawToken ? rawToken.substring(0, 3) + "***" : null;
+            const myAlias = rawToken ? rawToken.substring(0, 3) + "***" : "TÚ";
 
             const response = await fetch('/api/leaderboard');
             const result = await response.json();
@@ -93,35 +109,22 @@ function create() {
                 this.screens.leaderboard.innerHTML = '';
                 result.data.forEach((entry, index) => {
                     const row = document.createElement('tr');
-                    
-                    // Highlight the current user (Domain 44)
                     const isCurrentUser = (entry.alias === myAlias);
-                    if (isCurrentUser) {
-                        row.style.background = 'rgba(0, 242, 96, 0.15)';
-                        row.style.color = '#00f260';
-                    }
+                    
+                    row.style.background = isCurrentUser ? 'rgba(0, 242, 96, 0.1)' : 'transparent';
+                    row.style.color = isCurrentUser ? '#00f260' : 'white';
 
                     row.innerHTML = `
-                        <td style="padding:16px; font-weight:900; opacity:${isCurrentUser ? '1' : '0.3'};">#${index + 1}</td>
-                        <td style="padding:16px; font-weight:700;">${entry.alias} ${isCurrentUser ? '(TÚ)' : ''}</td>
-                        <td style="padding:16px; text-align:right; font-weight:900;">${entry.value.toLocaleString()}</td>
+                        <td style="padding:14px 20px; font-weight:900; opacity:0.3;">${index + 1}</td>
+                        <td style="padding:14px 20px; font-weight:700;">${entry.alias} ${isCurrentUser ? '<b>(TÚ)</b>' : ''}</td>
+                        <td style="padding:14px 20px; text-align:right; font-weight:900;">${entry.value.toLocaleString()}</td>
                     `;
                     this.screens.leaderboard.appendChild(row);
                 });
             }
         } catch (error) {
-            console.error("[API] Failed to load leaderboard:", error);
-            this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px;">Error de conexión</td></tr>';
+            this.screens.leaderboard.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:20px;">Sin conexión</td></tr>';
         }
-    };
-
-    this.generateSignature = async (score) => {
-        const rawData = `${this.sessionSeed}_${score}_${this.securitySeal}`;
-        const encoder = new TextEncoder();
-        const data = encoder.encode(rawData);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     };
 
     this.submitScore = async () => {
@@ -146,16 +149,12 @@ function create() {
                 this.showScreen('tutorial');
                 this.gameActive = false;
             } else { this.screens.error.classList.remove('hidden'); }
-        } catch (e) { this.screens.error.classList.remove('hidden'); }
+        } catch (error) { this.screens.error.classList.remove('hidden'); }
     };
 
     document.getElementById('btn-start').onclick = () => validateToken(this.screens.input.value.trim());
     document.getElementById('btn-restart').onclick = () => window.location.reload();
-
-    this.playSpatialSound = (key, x) => {
-        const pan = (x - centerX) / (this.sys.game.config.width / 2);
-        this.sound.play(key, { volume: 0.8, pan: Phaser.Math.Clamp(pan, -1, 1) });
-    };
+    document.getElementById('btn-share').onclick = () => this.shareResult();
 
     this.pitch = this.add.tileSprite(centerX, this.sys.game.config.height / 2, 1080, 1920, 'pitch').setAlpha(0.8);
     this.goalie = this.physics.add.sprite(centerX, topY, 'goalie').setScale(1.5).setImmovable(true);
@@ -176,7 +175,7 @@ function create() {
             this.showScreen('none');
             this.screens.hud.classList.remove('hidden');
             this.gameActive = true;
-            this.audio.init(); 
+            if (this.game.sound.context.state === 'suspended') this.game.sound.context.resume();
             return;
         }
         if (!this.gameActive || this.isResolving) return;
@@ -194,7 +193,7 @@ function create() {
             this.lastShotTelemetry.curvature = dX;
             this.ball.setVelocity(dX * 13000, dY * 13000);
             this.ball.setAccelerationX(dX * 2500);
-            this.playSpatialSound('kick', pointer.x);
+            this.sound.play('kick', { volume: 0.6, pan: Phaser.Math.Clamp((pointer.x - centerX) / (this.sys.game.config.width / 2), -1, 1) });
             const relX = (centerX + (dX * 1000)) - centerX;
             const willSave = Math.random() < ((Math.abs(relX) > 200) ? 0.3 : 0.85);
             let targetX = willSave ? centerX + (dX * 1000) : (dX > 0 ? centerX - 300 : centerX + 300);
@@ -206,6 +205,15 @@ function create() {
         this.ball.setPosition(centerX, bottomY).setVelocity(0, 0).setAccelerationX(0).setScale(1.2);
         this.goalie.setPosition(centerX, topY);
         this.isResolving = false;
+    };
+
+    this.generateSignature = async (score) => {
+        const rawData = `${this.sessionSeed}_${score}_${this.securitySeal}`;
+        const encoder = new TextEncoder();
+        const data = encoder.encode(rawData);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     };
 }
 
@@ -223,13 +231,13 @@ function update(time, delta) {
         this.ball.setVelocity(0, 0).setAccelerationX(0);
         const isGoal = Math.abs(this.ball.x - (this.sys.game.config.width / 2)) < 300;
         if (isGoal) {
-            this.playSpatialSound('goal', this.ball.x);
+            this.sound.play('goal', { volume: 1 });
             this.cameras.main.flash(200, 0, 242, 96, 0.3);
             this.streak++; this.score += (100 * this.streak);
             this.updateUI();
             this.time.delayedCall(1500, () => this.resetMatch());
         } else {
-            this.playSpatialSound('miss', this.ball.x);
+            this.sound.play('miss', { volume: 0.5 });
             this.submitScore();
             this.time.delayedCall(1500, () => {
                 this.screens.finalScore.innerText = this.score;

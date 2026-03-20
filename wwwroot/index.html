@@ -54,41 +54,12 @@
             text-align: center;
             color: white;
             box-shadow: 0 20px 60px rgba(0,0,0,0.8);
-            max-width: 450px; width: 90%;
+            max-width: 450px; width: 95%;
         }
 
-        h1, h2 { font-family: 'Bebas Neue', cursive; letter-spacing: 2px; }
+        h1, h2, h3 { font-family: 'Bebas Neue', cursive; letter-spacing: 2px; }
         .title { font-size: 4rem; line-height: 0.9; margin-bottom: 10px; }
         .highlight { color: var(--primary); }
-
-        /* Form Elements */
-        .input-group { margin: 25px 0; }
-        input {
-            width: 100%;
-            background: rgba(255,255,255,0.05);
-            border: 2px solid rgba(255,255,255,0.1);
-            border-radius: 15px;
-            padding: 18px;
-            color: white;
-            text-align: center;
-            font-size: 1.5rem;
-            font-weight: 900;
-            letter-spacing: 4px;
-            outline: none;
-            transition: border-color 0.3s;
-            pointer-events: auto;
-            user-select: text !important;
-        }
-        input:focus { border-color: var(--primary); }
-
-        .error-msg {
-            color: var(--error);
-            font-size: 0.75rem;
-            font-weight: bold;
-            margin-top: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
 
         /* HUD */
         .hud-container {
@@ -105,14 +76,32 @@
 
         /* Buttons */
         .btn {
-            background: var(--primary); color: black;
             border: none; padding: 18px 40px; border-radius: 15px;
             font-family: 'Bebas Neue'; font-size: 1.8rem;
             cursor: pointer; transition: transform 0.1s, background 0.2s;
             width: 100%; pointer-events: auto;
         }
-        .btn:hover { background: #05d658; }
+        .btn-primary { background: var(--primary); color: black; }
+        .btn-secondary { background: white; color: black; margin-top: 10px; }
+        .btn-share { background: var(--accent); color: white; margin-top: 10px; }
+        
+        .btn:hover { filter: brightness(1.1); }
         .btn:active { transform: scale(0.96); }
+
+        /* Leaderboard Table Refinement (Phase C) */
+        .leaderboard-container {
+            margin: 20px 0; background: rgba(255,255,255,0.03); 
+            border-radius: 20px; overflow: hidden; border: 1px solid var(--border-glass);
+        }
+        .leaderboard-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .leaderboard-table th { 
+            padding: 12px 20px; font-size: 10px; text-transform: uppercase; 
+            opacity: 0.4; background: rgba(255,255,255,0.05); font-weight: 900;
+        }
+        .leaderboard-table td { 
+            padding: 14px 20px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.03); 
+        }
+        .leaderboard-table tr:last-child td { border-bottom: none; }
 
         .hidden { display: none !important; }
     </style>
@@ -121,7 +110,6 @@
     <div id="game-container"></div>
     
     <div id="ui-overlay">
-        <!-- HUD -->
         <header id="game-hud" class="hud-container hidden">
             <div class="hud-item">
                 <span class="hud-label">PUNTUACIÃ“N</span>
@@ -133,35 +121,46 @@
             </div>
         </header>
 
-        <!-- Welcome Screen -->
+        <!-- Welcome -->
         <section id="screen-welcome" class="screen active">
             <div class="glass-panel">
                 <h1 class="title">PENALTY<br><span class="highlight">CHALLENGE</span></h1>
                 <p style="opacity: 0.6; margin-bottom: 5px;">PROYECTO DE PRODUCCIÃ“N FINAL</p>
-                
-                <div class="input-group">
+                <div style="margin: 25px 0;">
                     <input type="text" id="credential-input" placeholder="CÃ“DIGO" maxlength="12" spellcheck="false" autocomplete="off">
-                    <p id="validation-error" class="error-msg hidden">Credencial invÃ¡lida o vacÃ­a</p>
+                    <p id="validation-error" style="color:var(--error); font-size:10px; margin-top:10px; font-weight:bold; display:none;">CREDENCIAL INVÃLIDA</p>
                 </div>
-
-                <button id="btn-start" class="btn">ENTRAR AL CAMPO</button>
+                <button id="btn-start" class="btn btn-primary">ENTRAR AL CAMPO</button>
             </div>
         </section>
 
-        <!-- Results Screen -->
+        <!-- Results -->
         <section id="screen-results" class="screen">
             <div class="glass-panel">
-                <h2 style="font-size: 3.5rem; margin-bottom: 10px;">¡FIN DEL JUEGO!</h2>
-                <div style="margin: 30px 0;">
-                    <p style="opacity: 0.6; font-size: 0.9rem; text-transform: uppercase; font-weight: 900;">Tu Puntaje Final</p>
-                    <p id="final-score" style="font-size: 5rem; font-family: 'Bebas Neue'; color: var(--primary); line-height: 1;">0</p>
+                <h2 style="font-size: 3rem; line-height: 1;">¡FIN DEL JUEGO!</h2>
+                <div style="margin: 20px 0;">
+                    <p style="opacity: 0.5; font-size: 0.8rem; font-weight: 900; text-transform: uppercase;">Tu Puntaje Final</p>
+                    <p id="final-score" style="font-size: 4.5rem; font-family: 'Bebas Neue'; color: var(--primary); line-height: 1;">0</p>
                 </div>
                 
-                <div id="leaderboard-body" style="margin-bottom: 30px; max-height: 200px; overflow-y: auto;">
-                    <!-- Rows will be injected here -->
+                <div class="leaderboard-container">
+                    <h3 style="padding: 10px 20px; text-align: left; font-size: 0.8rem; opacity: 0.5;">RANKING GLOBAL</h3>
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>JUGADOR</th>
+                                <th style="text-align: right;">PTS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-body"></tbody>
+                    </table>
                 </div>
 
-                <button id="btn-restart" class="btn">REINTENTAR</button>
+                <div style="display: flex; flex-direction: column; gap: 0;">
+                    <button id="btn-restart" class="btn btn-secondary">REINTENTAR</button>
+                    <button id="btn-share" class="btn btn-share">COMPARTIR LOGRO</button>
+                </div>
             </div>
         </section>
     </div>
