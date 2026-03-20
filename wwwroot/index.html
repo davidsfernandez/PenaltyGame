@@ -88,7 +88,15 @@
         .btn:hover { filter: brightness(1.1); }
         .btn:active { transform: scale(0.96); }
 
-        /* Leaderboard Table Refinement (Phase C) */
+        /* Pause Screen & Countdown */
+        #screen-pause { background: rgba(0,0,0,0.9); }
+        .countdown-text { 
+            font-size: 8rem; font-family: 'Bebas Neue'; color: var(--primary); 
+            text-shadow: 0 0 30px var(--primary); animation: pulse 1s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+        /* Leaderboard Table */
         .leaderboard-container {
             margin: 20px 0; background: rgba(255,255,255,0.03); 
             border-radius: 20px; overflow: hidden; border: 1px solid var(--border-glass);
@@ -101,7 +109,6 @@
         .leaderboard-table td { 
             padding: 14px 20px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.03); 
         }
-        .leaderboard-table tr:last-child td { border-bottom: none; }
 
         .hidden { display: none !important; }
     </style>
@@ -111,14 +118,8 @@
     
     <div id="ui-overlay">
         <header id="game-hud" class="hud-container hidden">
-            <div class="hud-item">
-                <span class="hud-label">PUNTUACIÃ“N</span>
-                <span id="score-display" class="hud-value">0</span>
-            </div>
-            <div class="hud-item">
-                <span class="hud-label">RACHA</span>
-                <span id="streak-display" class="hud-value">x0</span>
-            </div>
+            <div class="hud-item"><span class="hud-label">PUNTUACIÃ“N</span><span id="score-display" class="hud-value">0</span></div>
+            <div class="hud-item"><span class="hud-label">RACHA</span><span id="streak-display" class="hud-value">x0</span></div>
         </header>
 
         <!-- Welcome -->
@@ -127,10 +128,28 @@
                 <h1 class="title">PENALTY<br><span class="highlight">CHALLENGE</span></h1>
                 <p style="opacity: 0.6; margin-bottom: 5px;">PROYECTO DE PRODUCCIÃ“N FINAL</p>
                 <div style="margin: 25px 0;">
-                    <input type="text" id="credential-input" placeholder="CÃ“DIGO" maxlength="12" spellcheck="false" autocomplete="off">
+                    <input type="text" id="credential-input" placeholder="CÃ“DIGO" maxlength="12" spellcheck="false" autocomplete="off" style="width:100%; background:rgba(255,255,255,0.05); border:2px solid rgba(255,255,255,0.1); border-radius:15px; padding:18px; color:white; text-align:center; font-size:1.5rem; font-weight:900;">
                     <p id="validation-error" style="color:var(--error); font-size:10px; margin-top:10px; font-weight:bold; display:none;">CREDENCIAL INVÃLIDA</p>
                 </div>
                 <button id="btn-start" class="btn btn-primary">ENTRAR AL CAMPO</button>
+            </div>
+        </section>
+
+        <!-- Tutorial -->
+        <section id="screen-tutorial" class="screen">
+            <div class="glass-panel">
+                <h2 style="font-size: 3rem;">PREPÃRATE</h2>
+                <p style="opacity: 0.6; margin: 20px 0;">DESLIZA HACIA ARRIBA PARA TIRAR</p>
+                <div style="height: 100px;"></div>
+                <p style="font-size: 0.8rem; font-weight: 900; color: var(--primary);">TOCA PARA EMPEZAR</p>
+            </div>
+        </section>
+
+        <!-- Pause & Countdown -->
+        <section id="screen-pause" class="screen">
+            <div style="text-align: center;">
+                <h2 style="color: white; font-size: 2rem; margin-bottom: 20px;">REANUDANDO...</h2>
+                <div id="countdown-value" class="countdown-text">3</div>
             </div>
         </section>
 
@@ -142,25 +161,11 @@
                     <p style="opacity: 0.5; font-size: 0.8rem; font-weight: 900; text-transform: uppercase;">Tu Puntaje Final</p>
                     <p id="final-score" style="font-size: 4.5rem; font-family: 'Bebas Neue'; color: var(--primary); line-height: 1;">0</p>
                 </div>
-                
                 <div class="leaderboard-container">
-                    <h3 style="padding: 10px 20px; text-align: left; font-size: 0.8rem; opacity: 0.5;">RANKING GLOBAL</h3>
-                    <table class="leaderboard-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>JUGADOR</th>
-                                <th style="text-align: right;">PTS</th>
-                            </tr>
-                        </thead>
-                        <tbody id="leaderboard-body"></tbody>
-                    </table>
+                    <table class="leaderboard-table"><tbody id="leaderboard-body"></tbody></table>
                 </div>
-
-                <div style="display: flex; flex-direction: column; gap: 0;">
-                    <button id="btn-restart" class="btn btn-secondary">REINTENTAR</button>
-                    <button id="btn-share" class="btn btn-share">COMPARTIR LOGRO</button>
-                </div>
+                <button id="btn-restart" class="btn btn-secondary">REINTENTAR</button>
+                <button id="btn-share" class="btn btn-share">COMPARTIR LOGRO</button>
             </div>
         </section>
     </div>
